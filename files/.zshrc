@@ -106,7 +106,7 @@ ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 # Custom plugins may be added to ${ZSH_CUSTOM}/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(brew direnv eza fast-syntax-highlighting git git-extras iterm2 mise sudo zbell zsh-autosuggestions)
+plugins=(brew direnv eza fast-syntax-highlighting git git-extras iterm2 mise sudo zbell zsh-autosuggestions vi-mode)
 
 # Set plugin options that are needed before each plugin is loaded
 zstyle ':omz:plugins:eza' 'icons' yes
@@ -137,6 +137,8 @@ command_exists vi && test -z "${EDITOR}" && export EDITOR="vi"
 
 # Compilation flags
 [[ "${ARCH}" =~ "x86" ]] && export ARCHFLAGS="-arch x86_64"
+
+bindkey -M viins jj vi-cmd-mode
 
 # Set personal aliases, overriding those provided by Oh My Zsh libs,
 # plugins, and themes. Aliases can be placed here, though Oh My Zsh

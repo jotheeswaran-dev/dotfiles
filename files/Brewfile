@@ -21,160 +21,154 @@ is_arm = Hardware::CPU.arm?
 
 tap 'homebrew/services'
 tap 'romkatv/powerlevel10k'
+tap 'azure/functions'
 
+
+# brew 'moreutils'
+# brew 'shellcheck'
+# brew 'syncthing'
+brew 'autoconf'
+brew 'awscli'
 brew 'bash'
 brew 'bat'
 brew 'btop'
+# brew 'cask'
 brew 'curl'
 brew 'diff-so-fancy'
 brew 'direnv'
+brew 'emacs'
 brew 'eza'
+brew 'freetds'
+brew 'gimme-aws-creds'
 brew 'git-extras'
 brew 'git-gui'
 brew 'git-tools'
 brew 'git'
+# brew 'glib'
+brew 'gnupg'
+brew 'gnutls'
+brew 'guile'
+brew 'http-server'
+brew 'jpeg-xl'
 brew 'jq'
+brew 'kcat'
 brew 'less'
+brew 'lftp'
+brew 'libfido2'
+brew 'libidn2'
+brew 'libpq'
+brew 'libssh'
+brew 'maven'
 brew 'mise'
-brew 'moreutils'
+# brew 'mysql'
 brew 'ncdu'
+brew 'nghttp2'
+brew 'openldap'
+brew 'p11-kit'
+# brew 'poetry'
+brew 'postgresql@14'
 brew 'powerlevel10k'
 brew 'prettyping'
+brew 'qemu'
 brew 'ripgrep'
-brew 'shellcheck'
-brew 'syncthing'
+brew 'saml2aws'
+brew 'talisman'
+brew 'terraform'
 brew 'tldr'
+brew 'unbound'
 brew 'vim'
 brew 'watch'
 brew 'wget'
 brew 'wifi-password'
+brew 'yazi'
 brew 'zsh'
 
 # ----------------------------------------------------------------------------------------------------------
-brew 'mas'
-mas 'iBar-Menubar icon control tool', id: 6443843900
-# mas 'Command X', id: 6448461551
-
-# ----------------------------------------------------------------------------------------------------------
+# cask 'cloudflare-warp'
+# cask 'keepassxc@beta'
+# cask 'keepingyouawake'
+# cask 'libreoffice'
+# cask 'ollama', restart_service: :changed
+# cask 'silicon' if is_arm
+# cask 'vscodium@insiders'   # TODO: Doesn't handle 'Remote Containers' and GH-based auto-syncing when comparing to VSCode
+cask '1password-cli'
+cask '1password'
 cask 'aldente'
+# cask 'alt-tab'
 cask 'appcleaner'
 cask 'arc'
+cask 'aws-vpn-client'
+# cask 'balance-lock'
 cask 'brave-browser'
 cask 'clocker'
-# cask 'cloudflare-warp'
-cask 'firefox@nightly' #, greedy: true
+# cask 'firefox@nightly' #, greedy: true
 cask 'font-meslo-lg-nerd-font'
+cask 'google-chrome'
+cask 'google-cloud-sdk'
+cask 'insomnia'
+cask 'intellij-idea-ce'
 cask 'iterm2'
 cask 'itsycal'
-cask 'keepassxc@beta'
-cask 'keepingyouawake'
 cask 'keybase'
-cask 'libreoffice'
+cask 'laravel-kit'
+cask 'logi-options+'
+cask 'microsoft-auto-update'
+cask 'microsoft-office'
 cask 'microsoft-remote-desktop'
+cask 'microsoft-teams'
 cask 'monolingual'
-cask 'notunes'
-cask 'ollama', restart_service: :changed
+# cask 'notunes'
+# cask 'ollama', restart_service: :changed
 cask 'orbstack'
 cask 'protonvpn'
+cask 'ngrok'
+# cask 'notunes'
+cask 'pgadmin4'
+cask 'postman'
+cask 'protonvpn'
+# cask 'pycharm-ce'
+# cask 'rancher'
 cask 'raycast'
-cask 'silicon' if is_arm
+cask 'rectangle'
+cask 'slack'
+cask 'spotify'
 cask 'stats'
+# cask 'tableplus'
 cask 'the-unarchiver'
-cask 'vscodium@insiders'   # TODO: Doesn't handle 'Remote Containers' and GH-based auto-syncing when comparing to VSCode
+cask 'todoist'
+cask 'visual-studio-code'
+# cask 'warp'
+cask 'xampp-vm'
 cask 'zoom'
 
-# VSCode extensions
-# Note: I don't want brew to silently install VS Code (which is what it does currently if the following lines are present but it doesn't find code!)
-is_vscode_installed = !`which code`.chomp.empty?
-if is_vscode_installed
-  vscode 'brandonkirbyson.vscode-animations'
-  vscode 'britesnow.vscode-toggle-quotes'
-  vscode 'codezombiech.gitignore'
-  vscode 'davidanson.vscode-markdownlint'
-  vscode 'dbaeumer.vscode-eslint'
-  vscode 'digitalbrainstem.javascript-ejs-support'
-  vscode 'drcika.apc-extension'
-  vscode 'eamodio.gitlens'
-  vscode 'editorconfig.editorconfig'
-  vscode 'esbenp.prettier-vscode'
-  # vscode 'formulahendry.code-runner'
-  vscode 'genuitecllc.codetogether'
-  vscode 'ibm.output-colorizer'
-  vscode 'mechatroner.rainbow-csv'
-  vscode 'mikestead.dotenv'
-  vscode 'mkhl.direnv'
-  vscode 'ms-azuretools.vscode-docker'
-  vscode 'ms-vscode.vscode-typescript-next'
-  # vscode 'nicolasvuillamy.vscode-groovy-lint'
-  vscode 'oderwat.indent-rainbow'
-  vscode 'orta.vscode-jest'
-  vscode 'rebornix.ruby'
-  # vscode 'redhat.java'
-  vscode 'redhat.vscode-yaml'
-  vscode 'richie5um2.vscode-sort-json'
-  vscode 'shan.code-settings-sync'
-  # vscode 'sonarsource.sonarlint-vscode'
-  vscode 'tchayen.markdown-links'
-  vscode 'tyriar.sort-lines'
-  # vscode 'vscjava.vscode-java-debug'
-  # vscode 'vscjava.vscode-java-pack'
-  # vscode 'vscjava.vscode-java-test'
-  # This is failing on different machines
-  # vscode 'vscjava.vscode-lombok'
-  vscode 'vscode-icons-team.vscode-icons'
-  vscode 'wayou.vscode-todo-highlight'
-  vscode 'wholroyd.jinja'
-  vscode 'wingrunr21.vscode-ruby'
-  vscode 'wmaurer.change-case'
-  vscode 'yzhang.markdown-all-in-one'
-end
-
-# ----------------------------------------------------------------------------------------------------------
-# TODO: This doesn't solve the issue about performing a custom action when a specific formula/cask is (re)installed - keeping for future reference
-at_exit do
-  # This is required for completions from other plugins to work (for eg git-extras)
-  system("rm -rfv \"$HOMEBREW_REPOSITORY/share/zsh/site-functions/_git\"") || true
-end
-
-# ----------------------------------------------------------------------------------------------------------
-# Moved these brew and cask lines to clean up the noise from the above alphabetically sorted lists
-
-# ---- docker utilities
-# brew 'dive'   # docker layers inspection on steroids
-# brew 'docker-diff'
-# brew 'docker-slim'  # TODO: investigate if the http-probe is a deal-breaker
-# brew 'hadolint'     # lint Dockerfiles (similar to shellcheck for shell scripts)
-# brew 'kubernetes-cli', link: true   # Note: Had to do this: rm /usr/local/bin/kubectl && brew link --overwrite kubernetes-cli
-# brew 'kubernetes-helm'
-
-# ---- command-line utilities
-# brew 'fzy'
-
-# ---- git utilities
-# brew 'git-crypt'
-
-# ---- tmux utilities
-# brew 'tmux'
-# brew 'reattach-to-user-namespace' # Needed if using tmux (to be able to access the macos clipboard from within tmux)
-
-# ---- general utilities
-# brew 'gradle'
-# brew 'gradle-completion'
-# brew 'libressl', link: true
-# brew 'localstack'
-# brew 'speedtest-cli'
-
-# https://docs.github.com/en/get-started/getting-started-with-git/caching-your-github-credentials-in-git
-# cask 'git-credential-manager'
-
-# ---- casks
-# cask 'dbeaver-community'
-# cask 'intellij-idea-ce'
-# cask 'kdiff3'
-# cask 'keycastr'
-# cask 'licecap'
-# cask 'lulu'
-# cask 'netspot'
-# cask 'ngrok'
-# cask 'onyx'  # Commented out since I'm on the beta version of macos
-# cask 'tempbox'
+vscode 'alefragnani.project-manager'
+vscode 'codezombiech.gitignore'
+vscode 'donjayamanne.git-extension-pack'
+vscode 'donjayamanne.githistory'
+vscode 'eamodio.gitlens'
+vscode 'esbenp.prettier-vscode'
+vscode 'hashicorp.terraform'
+vscode 'hbenl.vscode-test-explorer'
+vscode 'kevinrose.vsc-python-indent'
+vscode 'kreativ-software.csharpextensions'
+vscode 'meezilla.json'
+vscode 'ms-azuretools.vscode-docker'
+vscode 'ms-dotnettools.csdevkit'
+vscode 'ms-dotnettools.csharp'
+vscode 'ms-dotnettools.vscode-dotnet-runtime'
+vscode 'ms-ossdata.vscode-postgresql'
+vscode 'ms-python.debugpy'
+vscode 'ms-python.python'
+vscode 'ms-python.vscode-pylance'
+vscode 'ms-vscode.makefile-tools'
+vscode 'ms-vscode.test-adapter-converter'
+vscode 'postman.postman-for-vscode'
+vscode 'qwtel.sqlite-viewer'
+vscode 'rangav.vscode-thunder-client'
+vscode 'redhat.vscode-xml'
+vscode 'vscode-icons-team.vscode-icons'
+vscode 'vscodevim.vim'
+vscode 'tyriar.sort-lines'
+vscode 'yuvraj.json-scape-unscape'
+vscode 'zainchen.json'
+vscode 'ziyasal.vscode-open-in-github'
