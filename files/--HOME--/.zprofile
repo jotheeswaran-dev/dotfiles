@@ -43,7 +43,7 @@ ensure_dir_exists_if_var_defined "${XDG_STATE_HOME}"
 
 # ------------ Env vars for basic/common setup ------------
 # The github username where the setup scripts are downloaded from
-export GH_USERNAME="vraravam"
+export GH_USERNAME="jotheeswaran-dev"
 
 # Vijay's github username for setting upstream remote
 export UPSTREAM_GH_USERNAME="vraravam" # Note: Do NOT change this
@@ -69,7 +69,7 @@ export PERSONAL_PROFILES_DIR="${HOME}/personal/$(whoami)/profiles"
 ensure_dir_exists_if_var_defined "${PERSONAL_PROFILES_DIR}"
 
 # Keybase username
-export KEYBASE_USERNAME="avijayr"
+export KEYBASE_USERNAME="jotheeswarandev"
 
 # Keybase home repo name
 export KEYBASE_HOME_REPO_NAME="home"
