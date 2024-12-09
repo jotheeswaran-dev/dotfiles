@@ -114,7 +114,7 @@ export ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 # Custom plugins may be added to ${ZSH_CUSTOM}/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(brew direnv eza git mise sudo zbell zsh-defer)
+plugins=(brew direnv eza git mise sudo zbell zsh-defer vi-mode)
 deferred_plugins=(fast-syntax-highlighting git-extras iterm2 zsh-autosuggestions)
 
 # according to https://github.com/zsh-users/zsh-completions/issues/603#issue-373185486, this can't be added as a plugin to omz for the fpath to work correctly
@@ -143,6 +143,8 @@ command_exists vi && test -z "${EDITOR}" && export EDITOR="vi"
 
 # Compilation flags
 export ARCHFLAGS="-arch $(uname -m)"
+
+bindkey -M viins jj vi-cmd-mode
 
 # Set personal aliases, overriding those provided by Oh My Zsh libs,
 # plugins, and themes. Aliases can be placed here, though Oh My Zsh

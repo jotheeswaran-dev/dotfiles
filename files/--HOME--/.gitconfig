@@ -188,6 +188,7 @@
 
   # pull all submodules
   pullsub = sf "git pull"
+	lt = log --color --graph --pretty=format:'%Cred%h%Creset %C(bold)%(trailers:key=Refs,valueonly,separator=%x2c)%Creset - %s %Cgreen(%cr)%C(bold blue) <%an>%C(nobold yellow)%d%Creset' --abbrev-commit
 [branch]
   autoSetupMerge = true
   autoSetupRebase = always
