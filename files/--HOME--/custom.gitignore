@@ -34,7 +34,6 @@ __pycache__
 .psqlrc
 .pub-cache/
 .pylint.d/
-.rd/
 .swiftpm/
 .talisman/bin/
 .talisman/talisman_html_report
@@ -71,6 +70,8 @@ __pycache__
 /.clamtk
 /.codetogether/team-settings.txt
 /.colima/
+/.config/AWS VPN Client/
+/.config/AWSVPNClient/
 /.config/caffeine/log
 /.config/coc/extensions/package.json
 /.config/coc/memos.json
@@ -79,6 +80,12 @@ __pycache__
 /.config/gatsby/config.json
 /.config/gatsby/events.json
 /.config/gatsby/sites/
+/.config/gcloud/
+/.pgadmin/pgadmin*log*
+/.pgadmin/sessions/
+/.python_history
+/.th-client/*.json
+/.vim/.*whist
 /.config/git/gitk
 /.config/iterm2/AppSupport
 /.config/jgit/config
@@ -146,6 +153,9 @@ __pycache__
 /.oh-my-zsh
 /.ollama/
 /.oracle_jre_usage/*.timestamp
+/.orbstack/.installid
+/.orbstack/bin/
+/.orbstack/data/
 /.org.eclipse*
 /.p4tickets
 /.packer.d/
@@ -215,6 +225,7 @@ __pycache__
 /mbox
 /Movies/
 /Music/
+/OrbStack/
 /OWASP-Dependency-Check/data
 /Parallels
 /personal/*/profiles/
@@ -273,9 +284,9 @@ tmp/
 /.pryrc
 /.psqlrc
 /.railsrc
+/.rufo
 /.ripgreprc
 /.rspec
-/.rufo
 /.rvmrc
 /.shellcheckrc
 /.shellrc
@@ -285,7 +296,9 @@ tmp/
 /.vim/autoload/plug.vim
 /.vimrc
 /.zlogin
+/.zprofile
 /.zshenv
 /.zshrc
 /.zshrc.custom
 /Brewfile
+

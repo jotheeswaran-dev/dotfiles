@@ -260,15 +260,21 @@ setup_login_item() {
 }
 
 app_list=(
+  '1Password.app'
   'AlDente.app'
+  'Arc.app'
   'Clocker.app'
   'Ice.app'
+  'iTerm.app'
   'Itsycal.app'
-  'KeepingYouAwake.app'
   'Keybase.app'
   'KeyCastr.app'
   'Raycast.app'
+  'Rectangle.app'
+  'Spotify.app'
   'Stats.app'
+  'Todoist.app'
+  'zoom.us.app'
   'ZoomHider.app'
 )
 for app in "${app_list[@]}"; do
