@@ -340,31 +340,40 @@ if is_non_zero_string "${KEYBASE_USERNAME}"; then
   #######################
   # Clone the home repo #
   #######################
-  section_header 'Cloning home repo'
+  section_header 'Cloning home and profiles repos in parallel'
+
+  home_clone_status=0
+  profiles_clone_status=0
+
   if is_non_zero_string "${KEYBASE_HOME_REPO_NAME}"; then
-    clone_repo_into "$(build_keybase_repo_url "${KEYBASE_HOME_REPO_NAME}")" "${HOME}"
+    clone_repo_into "$(build_keybase_repo_url "${KEYBASE_HOME_REPO_NAME}")" "${HOME}" &
+    home_clone_pid=$!
 
     # Reset ssh keys' permissions so that git doesn't complain when using them
-    set_ssh_folder_permissions
-
-    # Fix /etc/hosts file to block facebook
-    is_file "${PERSONAL_CONFIGS_DIR}/etc.hosts" && sudo cp "${PERSONAL_CONFIGS_DIR}/etc.hosts" /etc/hosts
+    set_ssh_folder_permissions &
   else
     warn "skipping cloning of home repo since the 'KEYBASE_HOME_REPO_NAME' env var hasn't been set"
+    home_clone_status=1
   fi
 
   ###########################
   # Clone the profiles repo #
   ###########################
-  section_header 'Cloning profiles repo'
   if is_non_zero_string "${KEYBASE_PROFILES_REPO_NAME}" && is_non_zero_string "${PERSONAL_PROFILES_DIR}"; then
-    clone_repo_into "$(build_keybase_repo_url "${KEYBASE_PROFILES_REPO_NAME}")" "${PERSONAL_PROFILES_DIR}"
+    clone_repo_into "$(build_keybase_repo_url "${KEYBASE_PROFILES_REPO_NAME}")" "${PERSONAL_PROFILES_DIR}" &
+    profiles_clone_pid=$!
 
     # Clone the natsumi-browser repo into the ZenProfile/Profiles/chrome folder
-    is_directory "${PERSONAL_PROFILES_DIR}/ZenProfile/Profiles/" && clone_repo_into "git@github.com:greeeen-dev/natsumi-browser" "${PERSONAL_PROFILES_DIR}/ZenProfile/Profiles/chrome"
+    is_directory "${PERSONAL_PROFILES_DIR}/ZenProfile/Profiles/" && \
+      clone_repo_into "git@github.com:greeeen-dev/natsumi-browser" "${PERSONAL_PROFILES_DIR}/ZenProfile/Profiles/chrome" &
   else
     warn "skipping cloning of profiles repo since either the 'KEYBASE_PROFILES_REPO_NAME' or the 'PERSONAL_PROFILES_DIR' env var hasn't been set"
+    profiles_clone_status=1
   fi
+
+  # Wait for both cloning operations to complete
+  wait $home_clone_pid || home_clone_status=$?
+  wait $profiles_clone_pid || profiles_clone_status=$?
 else
   warn "skipping cloning of any keybase repo since 'KEYBASE_USERNAME' has not been set"
 fi
