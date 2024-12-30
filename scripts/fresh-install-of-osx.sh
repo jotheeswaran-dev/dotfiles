@@ -304,16 +304,21 @@ fi
 #####################
 section_header 'Setting up login items'
 app_list=(
+  '1Password.app'
   'AlDente.app'
+  'Arc.app'
   'Clocker.app'
   'Ice.app'
+  'iTerm.app'
   'Itsycal.app'
-  'KeepingYouAwake.app'
+  'Karabiner-Elements.app'
   'Keybase.app'
   'KeyCastr.app'
   'KeyClu.app'
   'Raycast.app'
   'Stats.app'
+  'Todoist.app'
+  'zoom.us.app'
   'ZoomHider.app'
 )
 for app in "${app_list[@]}"; do

@@ -71,6 +71,8 @@ __pycache__
 /.clamtk
 /.codetogether/team-settings.txt
 /.colima/
+/.config/AWS VPN Client/
+/.config/AWSVPNClient/
 /.config/caffeine/log
 /.config/coc/extensions/package.json
 /.config/coc/memos.json
@@ -79,6 +81,12 @@ __pycache__
 /.config/gatsby/config.json
 /.config/gatsby/events.json
 /.config/gatsby/sites/
+/.config/gcloud/
+/.pgadmin/pgadmin*log*
+/.pgadmin/sessions/
+/.python_history
+/.th-client/*.json
+/.vim/.*whist
 /.config/git/gitk
 /.config/iterm2/AppSupport
 /.config/jgit/config
@@ -247,6 +255,10 @@ tmp/
 /.bashrc
 /.config/bat/config
 /.config/btop/btop.conf
+/.config/karabiner*
+/.config/nvim*
+/.config/tmux*
+/.config/yazi*
 /.cshrc
 /.curlrc
 /.default-gems
@@ -287,3 +299,4 @@ tmp/
 /.zshenv
 /.zshrc
 /Brewfile
+
