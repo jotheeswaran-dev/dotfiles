@@ -272,13 +272,20 @@ fi
 #####################
 section_header 'Setting up login items'
 app_list=(
+  '1Password.app'
   'AlDente.app'
+  'Arc.app'
   'Clocker.app'
   'Ice.app'
   'KeepingYouAwake.app'
+  'iTerm.app'
+  'Itsycal.app'
+  'Karabiner-Elements.app'
   'Keybase.app'
   'Raycast.app'
   'Stats.app'
+  'Todoist.app'
+  'zoom.us.app'
   'ZoomHider.app'
 )
 for app in "${app_list[@]}"; do
