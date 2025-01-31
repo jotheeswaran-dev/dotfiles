@@ -88,14 +88,21 @@ else
 fi
 
 # Setup the login items once the full list of applications has been installed on the machine
-setup_login_item 'AlDente'
-setup_login_item 'Clocker'
-setup_login_item 'Ice'
-setup_login_item 'KeepingYouAwake'
-setup_login_item 'Keybase'
-setup_login_item 'Raycast'
-setup_login_item 'Stats'
-setup_login_item 'ZoomHider'
+setup_login_item '1Password'     
+setup_login_item 'AlDente' 
+setup_login_item 'Arc' 
+setup_login_item 'Clocker' 
+setup_login_item 'Ice' 
+setup_login_item 'KeepingYouAwake' 
+setup_login_item 'iTerm' 
+setup_login_item 'Itsycal' 
+setup_login_item 'Karabiner-Elements' 
+setup_login_item 'Keybase' 
+setup_login_item 'Raycast' 
+setup_login_item 'Stats' 
+setup_login_item 'Todoist' 
+setup_login_item 'zoom.us' 
+setup_login_item 'ZoomHider' 
 
 # Cleanup temp functions, etc
 unfunction setup_login_item

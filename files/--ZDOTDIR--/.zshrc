@@ -114,7 +114,7 @@ export ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 # Custom plugins may be added to ${ZSH_CUSTOM}/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(brew direnv eza fast-syntax-highlighting git git-extras iterm2 mise sudo zbell zsh-autosuggestions)
+plugins=(brew direnv eza fast-syntax-highlighting git git-extras iterm2 mise sudo zbell zsh-autosuggestions vi-mode)
 
 # according to https://github.com/zsh-users/zsh-completions/issues/603#issue-373185486, this can't be added as a plugin to omz for the fpath to work correctly
 append_to_fpath_if_dir_exists "${ZSH_CUSTOM}/plugins/zsh-completions/src"
@@ -130,9 +130,12 @@ load_file_if_exists "${ZSH}/oh-my-zsh.sh"
 # Preferred editor for remote sessions
 test -n "${SSH_CONNECTION}" && export EDITOR="vi"
 # Use code if its installed (both Mac OSX and Linux)
-command_exists code && ! is_non_zero_string "${EDITOR}" && export EDITOR="code --wait"
+command_exists nvim && ! is_non_zero_string -z "${EDITOR}" && export EDITOR="nvim"
 # If neither of the above works, then fall back to vi
 command_exists vi && ! is_non_zero_string "${EDITOR}" && export EDITOR="vi"
+
+bindkey -M viins jj vi-cmd-mode
+eval "$(zoxide init --cmd cd zsh)"
 
 # Set personal aliases, overriding those provided by Oh My Zsh libs,
 # plugins, and themes. Aliases can be placed here, though Oh My Zsh
@@ -327,3 +330,17 @@ typeset -gU cdpath CPPFLAGS cppflags FPATH fpath infopath LDFLAGS ldflags MANPAT
 # for profiling zsh, see: https://unix.stackexchange.com/a/329719/27109
 # execute 'ZSH_PROFILE_RC=true zsh' and run 'zprof' to get the details
 test -n "${ZSH_PROFILE_RC+1}" && zprof
+
+# Config for yazi
+function y() {
+    local tmp="$(mktemp -t "yazi-cwd.XXXXXX")" cwd
+    yazi "$@" --cwd-file="$tmp"
+    if cwd="$(command cat -- "$tmp")" && [ -n "$cwd" ] && [ "$cwd" != "$PWD" ]; then
+        builtin cd -- "$cwd"
+    fi
+    rm -f -- "$tmp"
+}
+
+### MANAGED BY RANCHER DESKTOP START (DO NOT EDIT)
+export PATH="${HOME}/.rd/bin:${PATH+:${PATH}}"
+### MANAGED BY RANCHER DESKTOP END (DO NOT EDIT)
