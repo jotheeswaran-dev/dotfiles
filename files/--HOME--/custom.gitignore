@@ -65,13 +65,14 @@ __pycache__
 /.dotfiles/
 /.boot2docker/*
 /.BuildServer
-/.cache/
-/.cargo/
+/.cache
 /.CFUserTextEncoding
 /.chef
 /.clamtk
 /.codetogether/team-settings.txt
 /.colima/
+/.config/AWS VPN Client/
+/.config/AWSVPNClient/
 /.config/caffeine/log
 /.config/coc/extensions/package.json
 /.config/coc/memos.json
@@ -80,6 +81,12 @@ __pycache__
 /.config/gatsby/config.json
 /.config/gatsby/events.json
 /.config/gatsby/sites/
+/.config/gcloud/
+/.pgadmin/pgadmin*log*
+/.pgadmin/sessions/
+/.python_history
+/.th-client/*.json
+/.vim/.*whist
 /.config/git/gitk
 /.config/iterm2/AppSupport
 /.config/jgit/config
@@ -141,7 +148,6 @@ __pycache__
 /.mix/rebar
 /.mix/rebar3
 /.mono/registry/
-/.mozbuild/
 /.nchsoftware
 /.nix-profile
 /.npm
@@ -160,9 +166,6 @@ __pycache__
 /.recently-used.xbel
 /.rnd
 /.RSA/
-/.rustup/settings.toml
-/.rustup/toolchains/
-/.rustup/update-hashes/
 /.rvm/
 /.sbt/
 /.scalarDiagnostics/
@@ -253,6 +256,10 @@ tmp/
 /.config/bat/config
 /.config/btop/btop.conf
 /.config/mise/config.toml
+/.config/karabiner*
+/.config/nvim*
+/.config/tmux*
+/.config/yazi*
 /.cshrc
 /.curlrc
 /.default-gems
@@ -293,3 +300,4 @@ tmp/
 /.zshenv
 /.zshrc
 /Brewfile
+
