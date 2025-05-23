@@ -1,24 +1,18 @@
 # file location: ${PERSONAL_PROFILES_DIR}/.gitignore
 
-# Do NOT ignore the following files/directories
 !.bundle/config
 !.keep
-!/*Profile/Profiles/DefaultProfile/**/bookmarks.html
-!/*Profile/Profiles/DefaultProfile/**/cert8.db
-!/*Profile/Profiles/DefaultProfile/**/cookies.sqlite
-!/*Profile/Profiles/DefaultProfile/**/key3.db
-!/*Profile/Profiles/DefaultProfile/**/search.rdf
-!/*Profile/Profiles/DefaultProfile/**/searchplugins
-!/*Profile/Profiles/DefaultProfile/**/secmod.db
-!/*Profile/Profiles/DefaultProfile/**/signons.txt
-!/*Profile/Profiles/DefaultProfile/storage/default/**
-!/*Profile/Profiles/DefaultProfile/storage/permanent/**
+!/*Profile/Profiles/bookmarks.html
+!/*Profile/Profiles/cert8.db
+!/*Profile/Profiles/cookies.sqlite
+!/*Profile/Profiles/key3.db
+!/*Profile/Profiles/search.rdf
+!/*Profile/Profiles/searchplugins
+!/*Profile/Profiles/secmod.db
+!/*Profile/Profiles/signons.txt
 
 .~lock*#
 .DS_Store
-.local
-.thumbnails
-.Trash
 *-journal
 *.iso
 *.log
@@ -28,38 +22,22 @@
 *.zwc
 *db-shm
 *db-wal
+/.local
+/.thumbnails
+/.Trash
 Cache/
 CachedData/
-Crash\ Reports
 GPUCache/
-Local\ Folders
-Local\ Storage
-LOCK
-LOG*
 log/*.log
 logs/
-Network\ Action\ Predictor
-Network\ Persistent\ State
-Reporting\ and\ NEL
-Safe\ Browsing
-Service\ Worker
-Session\ Storage
-SingletonCookie
-SingletonLock
-SingletonSocket
-SiteSecurityServiceState.txt
-SS
 Thumbs.db
-TransportSecurity
 
-# Browser profiles - these files/folders can be safely igored for the backup strategy
+# Browser profiles
 /*Profile.tgz
 /*Profile/**/.parentlock
 /*Profile/**/.startup-incomplete
 /*Profile/**/*.bak
 /*Profile/**/*.baklz4
-/*Profile/**/*.Default*/
-/*Profile/**/*.files
 /*Profile/**/*.ldb
 /*Profile/**/*.leveldb/*
 /*Profile/**/*backup.json
@@ -71,36 +49,62 @@ TransportSecurity
 /*Profile/**/*saved-telemetry-pings*
 /*Profile/**/*ShutdownDuration*
 /*Profile/**/*thumbnails*
-/*Profile/**/AlternateServices*
+/*Profile/**/AlternateServices.txt
 /*Profile/**/bookmarkbackups
 /*Profile/**/cert-revocations/*.stash
+/*Profile/**/Code\ Cache
 /*Profile/**/compatibility.ini
+/*Profile/**/Crash\ Reports
 /*Profile/**/crashes/
 /*Profile/**/Crashpad*
 /*Profile/**/cur
 /*Profile/**/gcontactsync_log*.txt
+/*Profile/**/Local\ Folders
+/*Profile/**/Local\ Storage
+/*Profile/**/LOCK
+/*Profile/**/LOG*
 /*Profile/**/minidumps
 /*Profile/**/msgFilterRules.dat
+/*Profile/**/Network\ Action\ Predictor
+/*Profile/**/Network\ Persistent\ State
 /*Profile/**/panacea.dat
 /*Profile/**/Partitions/**
 /*Profile/**/photos
 /*Profile/**/Photos
 /*Profile/**/QuotaManager
+/*Profile/**/Reporting\ and\ NEL
 /*Profile/**/RunningChromeVersion
 /*Profile/**/safebrowsing-failedupdate
-/*Profile/**/serviceworker.txt
+/*Profile/**/Service\ Worker/**
+/*Profile/**/Session\ Storage
 /*Profile/**/sessionstore-backups
 /*Profile/**/sessionstore-logs
+/*Profile/**/SingletonCookie
+/*Profile/**/SingletonLock
+/*Profile/**/SingletonSocket
+/*Profile/**/SiteSecurityServiceState.txt
+/*Profile/**/SS
 /*Profile/**/storage/temporary
 /*Profile/**/Telemetry.ShutdownTime.txt
 /*Profile/**/tmp
+/*Profile/**/TransportSecurity
 /*Profile/**/weave
 
 # ignore git repo present in the browser's chrome directory
 /*Profile/Profiles/DefaultProfile/**/chrome
+# ignore git repo present in the ZenProfile's chrome directory
+/ZenProfile/Profiles/chrome
 
-/Raycast/extensions/
+/FerdiumProfile/.*.ferdium.*
+/FerdiumProfile/.has-app-requested-screen-capture-permissions
+/FerdiumProfile/.updaterId
+/FerdiumProfile/File\ System/**
+/FerdiumProfile/icons/
+/FerdiumProfile/recipes/
+/FerdiumProfile/sentry/
+
 /Raycast/NodeJS/runtime/
+/Raycast/extensions/
 /Raycast/posthog.queueFolder/
 
 # files that are symlinked from the dotfiles repo
