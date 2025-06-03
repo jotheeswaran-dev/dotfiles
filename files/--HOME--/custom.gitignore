@@ -3,6 +3,7 @@
 !.bundle/config
 !.keep
 
+__pycache__
 .~lock*#
 .babel.json
 .boxfuse/
@@ -13,7 +14,9 @@
 .dartServer/
 .docker/
 .dotnet/
+.DS_Store
 .electron-gyp
+.env
 .erlang-hist*
 .hawtjni/
 .helm/**/*.tgz
@@ -44,10 +47,10 @@
 *.db-wal
 *.fish
 *.iso
+*.log
 *.sqlite-shm
 *.sqlite-wal
 *.sw[nop]
-*.zcompdump*
 **/Skype/**/media_messaging/
 *db-shm
 *db-wal
@@ -59,15 +62,17 @@
 /.aspnet/DataProtection-Keys/
 /.bash_history
 /.bash_sessions
+/.dotfiles/
 /.boot2docker/*
 /.BuildServer
-/.cache/
-/.cargo/
+/.cache
 /.CFUserTextEncoding
 /.chef
 /.clamtk
 /.codetogether/team-settings.txt
 /.colima/
+/.config/AWS VPN Client/
+/.config/AWSVPNClient/
 /.config/caffeine/log
 /.config/coc/extensions/package.json
 /.config/coc/memos.json
@@ -76,6 +81,12 @@
 /.config/gatsby/config.json
 /.config/gatsby/events.json
 /.config/gatsby/sites/
+/.config/gcloud/
+/.pgadmin/pgadmin*log*
+/.pgadmin/sessions/
+/.python_history
+/.th-client/*.json
+/.vim/.*whist
 /.config/git/gitk
 /.config/iterm2/AppSupport
 /.config/jgit/config
@@ -87,7 +98,6 @@
 /.config/xbuild/pkgconfig-cache-2.xml
 /.config/zed/.tmp*
 /.config/zed/embeddings
-/.config/zsh/
 /.continue/calculator.py
 /.continue/config.py
 /.continue/server
@@ -96,7 +106,6 @@
 /.cups/
 /.cvecheck/cvecheck-runtime.properties
 /.dmrc
-/.dotfiles/
 /.dropbox*
 /.dvdcss
 /.eclipse/**/cache
@@ -117,11 +126,11 @@
 /.helm
 /.heroku
 /.hex
+/.irb_history
 /.ICEauthority
 /.ideaLibSources/
 /.install4j
 /.IntelliJIdea*/restart/restarter
-/.irb_history
 /.ivy2/
 /.java-caller/
 /.keepassx/
@@ -139,7 +148,6 @@
 /.mix/rebar
 /.mix/rebar3
 /.mono/registry/
-/.mozbuild/
 /.nchsoftware
 /.nix-profile
 /.npm
@@ -158,9 +166,6 @@
 /.recently-used.xbel
 /.rnd
 /.RSA/
-/.rustup/settings.toml
-/.rustup/toolchains/
-/.rustup/update-hashes/
 /.rvm/
 /.sbt/
 /.scalarDiagnostics/
@@ -194,6 +199,7 @@
 /.yarn/berry/telemetry.json
 /.yarnrc
 /.yjp
+/.zcompdump*
 /.zoomus
 /.zsh_history
 /.zsh_sessions/
@@ -249,8 +255,10 @@ tmp/
 /.bashrc
 /.config/bat/config
 /.config/btop/btop.conf
-/.config/mise/config.toml
-/.config/rubocop/config.yml
+/.config/karabiner*
+/.config/nvim*
+/.config/tmux*
+/.config/yazi*
 /.cshrc
 /.curlrc
 /.default-gems
@@ -291,3 +299,4 @@ tmp/
 /.zshenv
 /.zshrc
 /Brewfile
+
