@@ -29,8 +29,11 @@ puts "Only performing base installation!" if is_base_install
 # TODO: This doesn't solve the issue about performing a custom action when a specific formula/cask is (re)installed
 at_exit { system('post-brew-install.sh') }
 
+tap 'azure/functions'
+tap 'nikitabobko/tap'
 tap 'romkatv/powerlevel10k'
 tap 'TheBoredTeam/boring-notch' if OS::Mac::version >= 14
+tap 'sst/tap'
 
 # formulae pulled in from homebrew to replace system equivalents to fix any security issues since the OS was released
 brew 'bash'
@@ -41,6 +44,7 @@ brew 'rsync'
 brew 'vim'
 brew 'wget'
 brew 'zsh'
+brew 'opencode'
 
 # formulae pulled in for base configs (if these are absent, you will get errors and things won't work)
 brew 'diff-so-fancy'
@@ -59,42 +63,91 @@ cask 'keybase', postinstall: "\"${HOME}/.dotfiles/scripts/setup-login-item.sh\" 
 return 0 if is_base_install
 
 # formulae pulled in for advanced configs (these are optional, but still recommended)
+brew 'ansible'
+brew 'autoconf'
+brew 'awscli'
 brew 'bat'
 brew 'btop'
+brew 'coreutils'
+brew 'fzf'
+brew 'gh'
+brew 'gimme-aws-creds'
 brew 'git-gui'
+brew 'gnupg'
+brew 'gnutls'
+brew 'guile'
+brew 'http-server'
+brew 'jpeg-xl'
 brew 'jq'
+brew 'kcat'
+brew 'lftp'
+brew 'libfido2'
+brew 'libidn2'
+brew 'libpq'
+brew 'libssh'
 brew 'moreutils'
 brew 'ncdu'
+brew 'neovim'
+brew 'openldap'
 brew 'prettyping'
 brew 'ripgrep'
+brew 'saml2aws'
 brew 'syncthing'
+brew 'talisman'
+brew 'terraform'
 brew 'tlrc'
+brew 'tmux'
+brew 'yazi'
+brew 'zoxide'
 
+cask '1password-cli'
+cask '1password'
+cask 'aerospace'
 cask 'aldente', postinstall: "\"${HOME}/.dotfiles/scripts/setup-login-item.sh\" 'AlDente'"
-cask 'boring-notch', postinstall: "\"${HOME}/.dotfiles/scripts/setup-login-item.sh\" 'boringNotch'" if OS::Mac::version >= 14
+cask 'aws-vpn-client'
+cask 'azure-data-studio'
 cask 'brave-browser'
 cask 'clocker', postinstall: "\"${HOME}/.dotfiles/scripts/setup-login-item.sh\" 'Clocker'"
 cask 'firefox@nightly' #, greedy: true
 cask 'fliqlo'
-cask 'google-chrome@beta'
-cask 'jordanbaird-ice@beta', postinstall: "\"${HOME}/.dotfiles/scripts/setup-login-item.sh\" 'Ice'" if OS::Mac::version >= 14
+cask 'google-chrome'
+cask 'google-cloud-sdk'
+cask 'insomnia'
+cask 'itsycal'
+cask 'jordanbaird-ice', postinstall: "\"${HOME}/.dotfiles/scripts/setup-login-item.sh\" 'Ice'" if OS::Mac::version >= 14
+cask 'karabiner-elements'
 cask 'keepassxc@beta'
 cask 'keycastr'
 cask 'keyclu' if is_arm
+cask 'knockknock'
+cask 'laravel-kit'
+cask 'logi-options+'
+cask 'microsoft-auto-update'
+cask 'microsoft-office'
+cask 'microsoft-remote-desktop'
+cask 'microsoft-teams'
+cask 'monolingual'
+cask 'ngrok'
+cask 'notunes'
 cask 'ollama-app', restart_service: :changed
 cask 'onlyoffice'
 cask 'onyx' unless is_beta_os
 cask 'pearcleaner'
+cask 'pearcleaner', postinstall: "\"${HOME}/.dotfiles/scripts/setup-login-item.sh\" 'PearCleaner'"
 cask 'protonvpn'
 cask 'rancher'
 cask 'raycast', postinstall: "\"${HOME}/.dotfiles/scripts/setup-login-item.sh\" 'Raycast'"
+cask 'silicon' if is_arm
+cask 'slack'
+cask 'spotify'
 cask 'stats', postinstall: "\"${HOME}/.dotfiles/scripts/setup-login-item.sh\" 'Stats'"
-cask 'vscodium@insiders'   # TODO: Doesn't handle 'Remote Containers' and GH-based auto-syncing when compared to VSCode
+cask 'the-unarchiver'
+cask 'todoist-app'
+cask 'utm'
+cask 'visual-studio-code'
+cask 'whatsapp'
 cask 'zen@twilight'
 cask 'zoom'
-
-brew 'mas'
-mas 'PDFgear', id: 6469021132
 
 # VSCode extensions
 # Note: I don't want brew to silently install VS Code (which is what it does currently if the following lines are present but it doesn't find the executable 'code'!)
