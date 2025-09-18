@@ -1,2 +1,7 @@
 [settings]
 idiomatic_version_file_enable_tools = ["dotnet", "java", "node", "python", "ruby", "rust"]
+
+[tools]
+rust = "latest"
+uv = "latest"
+just = "latest"
