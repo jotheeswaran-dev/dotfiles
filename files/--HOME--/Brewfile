@@ -103,17 +103,17 @@ brew 'yazi'
 brew 'zoxide'
 
 cask '1password'
-cask '1password-cli'
+# cask '1password-cli'
 cask 'aerospace'
 cask 'aldente', postinstall: "\"${HOME}/.dotfiles/scripts/setup-login-item.sh\" 'AlDente'"
-cask 'aws-vpn-client'
-cask 'azure-data-studio'
+# cask 'aws-vpn-client'
+# cask 'azure-data-studio'
 cask 'beekeeper-studio'
 cask 'boring-notch', postinstall: "\"${HOME}/.dotfiles/scripts/setup-login-item.sh\" 'boringNotch'" if ::OS::Mac::version >= 14
 cask 'brave-browser'
 cask 'clocker', postinstall: "\"${HOME}/.dotfiles/scripts/setup-login-item.sh\" 'Clocker'"
 cask 'firefox@nightly' #, greedy: true
-cask 'fliqlo'
+# cask 'fliqlo'
 cask 'ghostty'
 cask 'google-chrome'
 cask 'google-cloud-sdk'
@@ -126,18 +126,18 @@ cask 'keycastr'
 cask 'keyclu' if is_arm
 cask 'knockknock'
 cask 'laravel-kit'
-cask 'logi-options+'
-cask 'microsoft-auto-update'
-cask 'microsoft-office'
-cask 'microsoft-remote-desktop'
-cask 'microsoft-teams'
-cask 'monolingual'
+# cask 'logi-options+'
+# cask 'microsoft-auto-update'
+# cask 'microsoft-office'
+# cask 'microsoft-remote-desktop'
+# cask 'microsoft-teams'
+# cask 'monolingual'
 cask 'ngrok'
 cask 'notunes'
 cask 'ollama-app', restart_service: :changed
 cask 'onlyoffice'
-cask 'onyx' # if !is_beta_os && ::OS::Mac::version < 26
-cask 'pearcleaner'
+# cask 'onyx' # if !is_beta_os && ::OS::Mac::version < 26
+# cask 'pearcleaner'
 cask 'pearcleaner', postinstall: "\"${HOME}/.dotfiles/scripts/setup-login-item.sh\" 'PearCleaner'"
 cask 'protonvpn'
 cask 'rancher'
@@ -152,7 +152,7 @@ cask 'utm'
 cask 'visual-studio-code'
 cask 'whatsapp'
 cask 'zen@twilight'
-cask 'zoom'
+# cask 'zoom'
 
 # VSCode extensions
 # Note: I don't want brew to silently install VS Code (which is what it does currently if the following lines are present but it doesn't find the executable 'code'!)
