@@ -78,7 +78,7 @@ The config file for this script is a yaml file that is passed into this script a
 * `folder` (mandatory) specifies the target folder where the repo should reside on local machine. If the folder name starts with `/`, then its assumed that the path starts from the root folder; if not, then its assumed to be relative to where the script is being run from. The ruby script also supports glob expansion of `~` to `${HOME}` if `~` is used. It can also handle shell env vars if they are in the format `${<env-key>}`
 * `remote` (mandatory) specifies the remote url of the repository
 * `other_remotes` (optional) specifies a hash of the other remotes keyed by the name with the value of the remote url
-* `active` (optional; default: false) specifies whether to set this folder/repo up or not on local
+* `active` (optional; default: false) specifies whether to process this folder/repo or not on your local machine
 * `post_clone` (optional; default: empty array) specifies other `bash` commands (in sequence) to be run once the resurrection is done - for eg, symlink a '.envrc' file if one exists
 
 ## setup-login-item.sh

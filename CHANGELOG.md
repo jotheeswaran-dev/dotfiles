@@ -1,11 +1,15 @@
-As documented in the README's [adopting](README.md#how-to-adoptcustomize-the-scripts-to-your-own-settings) section, this repo and its scripts are aimed at developers/techies. If you are stuck or need help in any fashion, you can reach out to [owner of the the parent repo](https://github.com/vraravam/dotfiles) from where this was forked.
+As documented in the README's [adopting](README.md#how-to-adoptcustomize-the-scripts-to-your-own-settings) section, this repo and its scripts are aimed at developers/techies. If you are stuck or need help in any fashion, you can reach out to the [owner of the the parent repo](https://github.com/vraravam) from where this was forked.
 
 For those who follow this repo, here's the changelog for ease of adoption:
+
+### 2.0.30
+
+* Updated documentation to clearly call out where references to my username (`vraravam`) should NOT be changed when forking for your usage.
 
 ### 2.0.29
 
 * Added Tor Browser.
-* Added some instructions for exporting/importing Raycast configurations.
+* Updated instructions for exporting/importing Raycast configurations.
 
 ### 2.0.28
 

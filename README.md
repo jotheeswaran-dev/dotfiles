@@ -58,8 +58,8 @@ In your forked repo, make the following changes, commit and push _via the Github
 
 4. You will have to force-push to your fork's remote after the above step. To accomplish this, I recommend using `git -C "${DOTFILES_DIR}" push --force-with-lease`
 5. After the above step, it is always recommended to run the `install-dotfiles.rb` script once to ensure all (non symlinked) changes are setup on your machine correctly.
-6. In case there are any other changes that might be needed after updating, these steps will be detailed in the [changelog](./CHANGELOG.md). In such rare cases, you might have to run the appropriate steps in sequence as detailed out in that section.
-7. After updating/catching-up, it is recommended to quit and restart the terminal so that all "in session memory" aliases, etc are up-to-date so that the files are sourced correctly.
+6. In case there are any other changes that might be needed after updating, these steps will be detailed in the [changelog](./CHANGELOG.md). In such rare cases, you might have to run the appropriate steps in sequence as detailed out in that section for that version.
+7. After updating/catching-up, it is recommended to quit and restart the terminal app so that all "in session memory" aliases, etc are up-to-date so that the files are sourced correctly.
 
 ## How to test changes in your fork before raising a Pull Request
 
@@ -76,7 +76,7 @@ The "advanced" setup is the set of final steps to capture your application prefe
 
 # Finally...
 
-The softwares in the `files/--HOME--/Brewfile` will be run only with the bare minimum of formulae. Once the process completes, and you restart the Terminal app, you would want to run `bupc` so that all the other applications can be installed.
+The softwares in the `files/--HOME--/Brewfile` will be run only with the bare minimum of formulae with the above invocation. Once the process completes, and you restart the Terminal app, you would want to run `bupc` so that all the other applications can be installed.
 
 Once the above is done, and if you have setup the [keybase](https://keybase.io)-based home repo, profile repo, etc - you can then re-import your exported preferences from the [pre-requisites section](#pre-requisite-if-you-want-to-capture-data-from-your-current-mac).
 
@@ -96,7 +96,7 @@ The backup strategy is **not a one-off activity**. It will require you to take s
 
 - Ensure that the software catalogs (`files/--HOME--/Brewfile`, `scripts/fresh-install-of-osx.sh`, `scripts/capture-prefs.sh`) are always kept in sync with the actual applications that you install and use
 - Ensure that the git repo catalogs that you are "tracking" in the `${PERSONAL_CONFIGS_DIR}/repositories-*.yml` files are kept up-to-date so that resurrection in your new machine will be seamless
-- Ensure to run the `scripts/capture-prefs.sh` (with the export switch) to export and capture/backup your preferences for all installed applications from your current machine. If you want to automate the repetitive running of this and possibly other scripts/commands, you can use the system-level cronjobs to set this up!
+- Ensure to run the `scripts/capture-prefs.sh` (with the export switch) to export and capture/backup your preferences for all installed applications from your current machine. If you want to automate the repetitive running of this and possibly other scripts/commands, you can use the system-level cronjobs to set this up, the details of which can be found in the Extras!
 
 # Extras/Details
 
