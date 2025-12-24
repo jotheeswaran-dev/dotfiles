@@ -111,7 +111,7 @@ export ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 # Custom plugins may be added to ${ZSH_CUSTOM}/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(direnv eza fast-syntax-highlighting git iterm2 mise sudo zbell zsh-autosuggestions)
+plugins=(direnv eza fast-syntax-highlighting git iterm2 mise sudo vi-mode zbell zsh-autosuggestions)
 
 # Note: Using 'brew' as an oh-my-zsh plugin causes the PATH to be incorrect. For eg, 'bash' gets resolved to '/bin/bash' (which comes default with the OS) rather than the one from homebrew.
 eval "$("${HOMEBREW_PREFIX}/bin/brew" shellenv)"
@@ -130,9 +130,12 @@ load_file_if_exists "${ZSH}/oh-my-zsh.sh"
 # Preferred editor for local and remote sessions
 is_non_zero_string "${SSH_CONNECTION}" && export EDITOR="vi"
 # Use code if its installed (both Mac OSX and Linux)
-command_exists code && ! is_non_zero_string "${EDITOR}" && export EDITOR="code --wait"
+command_exists nvim && ! is_non_zero_string "${EDITOR}" && export EDITOR="nvim"
 # If neither of the above works, then fall back to vi
 command_exists vi && ! is_non_zero_string "${EDITOR}" && export EDITOR="vi"
+
+bindkey -M viins jj vi-cmd-mode
+eval "$(zoxide init --cmd cd zsh)"
 
 # Set personal aliases, overriding those provided by Oh My Zsh libs,
 # plugins, and themes. Aliases can be placed here, though Oh My Zsh
@@ -340,4 +343,14 @@ typeset -gU cdpath CPPFLAGS cppflags FPATH fpath infopath LDFLAGS ldflags MANPAT
 
 # for profiling zsh, see: https://unix.stackexchange.com/a/329719/27109
 # execute 'ZSH_PROFILE_RC=true zsh' and run 'zprof' to get the details
-[[ -n "${ZSH_PROFILE_RC+1}" ]] && zprof
+test -n "${ZSH_PROFILE_RC+1}" && zprof
+
+# Config for yazi
+function y() {
+    local tmp="$(mktemp -t "yazi-cwd.XXXXXX")" cwd
+    yazi "$@" --cwd-file="$tmp"
+    if cwd="$(command cat -- "$tmp")" && [ -n "$cwd" ] && [ "$cwd" != "$PWD" ]; then
+        builtin cd -- "$cwd"
+    fi
+    rm -f -- "$tmp"
+}
