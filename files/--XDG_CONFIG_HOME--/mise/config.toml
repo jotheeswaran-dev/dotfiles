@@ -1,2 +1,22 @@
 [settings]
-idiomatic_version_file_enable_tools = ["dotnet", "elixir", "go", "haskell", "java", "javascript", "kotlin", "node", "python", "ruby", "rust", "scala"]
+idiomatic_version_file_enable_tools = [
+  "dotnet",
+  "elixir",
+  "go",
+  "haskell",
+  "java",
+  "javascript",
+  "kotlin",
+  "node",
+  "python",
+  "ruby",
+  "rust",
+  "scala",
+]
+
+[tools]
+rust = "latest"
+uv = "latest"
+just = "latest"
+yarn = "latest"
+node = "20"

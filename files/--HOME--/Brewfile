@@ -24,7 +24,10 @@ cask_args appdir: '/Applications', fontdir: '/Library/Fonts', no_quarantine: tru
 # TODO: Hardcoding of the dotfiles repo folder - since that env var is not available inside this env
 setup_login_items_script = "${HOME}/.dotfiles/scripts/setup-login-item.sh"
 
+tap 'azure/functions'
+tap 'nikitabobko/tap'
 tap 'romkatv/powerlevel10k'
+tap 'sst/tap'
 
 # Moving these casks to tbe beginning since they are required in the beginning (for manual login) for a vanilla OS installation
 cask 'font-meslo-lg-nerd-font'
@@ -47,6 +50,7 @@ brew 'sqlite3'
 brew 'vim'
 brew 'wget'
 brew 'zsh'
+brew 'opencode'
 
 # formulae pulled in for base configs (if these are absent, you will get errors and things won't work)
 brew 'diff-so-fancy'
@@ -67,41 +71,57 @@ if ENV.has_key?('HOMEBREW_BASE_INSTALL')
 end
 
 # formulae pulled in for advanced configs (these are optional, but still recommended)
+
+brew 'awscli'
 brew 'bat'
 brew 'btop'
 # brew 'container', restart_service: :changed if ::OS::Mac::version >= 26
+brew 'docker'
 brew 'dua-cli'
+brew 'fzf'
 brew 'git-gui'
 brew 'jq'
 brew 'moreutils'
 brew 'ncdu'
+brew 'neovim'
 brew 'pandoc'
 brew 'prettyping'
 brew 'ripgrep'
 brew 'shfmt'
 brew 'syncthing'
 brew 'tlrc'
+brew 'tmux'
+brew 'yazi'
+brew 'zoxide'
 
+cask '1password'
+cask 'aerospace'
 cask 'aldente', postinstall: "\"#{setup_login_items_script}\" -a 'AlDente'"
+cask 'arc'
+cask 'beekeeper-studio'
+cask 'bitwarden'
 cask 'brave-browser'
 cask 'clocker', postinstall: "\"#{setup_login_items_script}\" -a 'Clocker'"
+cask 'cursor-cli'
 cask 'firefox@nightly' #, greedy: true
+cask 'ghostty'
 cask 'google-chrome@beta'
 cask 'jordanbaird-ice@beta', postinstall: "\"#{setup_login_items_script}\" -a 'Ice'" if ::OS::Mac::version >= 14
+cask 'karabiner-elements', postinstall: "\"${HOME}/.dotfiles/scripts/setup-login-item.sh\" 'Karabiner-Elements'"
 cask 'keepassxc@beta'
-cask 'ollama-app', restart_service: :changed
+cask 'keycastr'
 cask 'onlyoffice'
-cask 'pearcleaner'
-cask 'protonvpn'
 cask 'rancher' # if ::OS::Mac::version < 26
 cask 'raycast', postinstall: "\"#{setup_login_items_script}\" -a 'Raycast'"
+cask 'slack'
+cask 'spotify'
 cask 'stats', postinstall: "\"#{setup_login_items_script}\" -a 'Stats'"
+cask 'the-unarchiver'
+cask 'todoist-app'
+cask 'visual-studio-code'
+cask 'whatsapp'
 cask 'zed@preview'
 cask 'zen@twilight'
-cask 'zoom'
-
-# brew 'mas'
-# mas 'PDFgear', id: 6469021132
 
 # VSCode extensions
 # Note: I don't want brew to silently install VS Code (which is what it does currently if the following lines are present but it doesn't find the executable 'code'!)
