@@ -19,10 +19,10 @@
 
 # ------------ Customizable env vars (MUST BE CHANGED to your values) ------------
 # The github username where the setup scripts are downloaded from
-export GH_USERNAME='vraravam'
+export GH_USERNAME='jotheeswaran-dev'
 
 # Keybase username
-export KEYBASE_USERNAME='avijayr'
+export KEYBASE_USERNAME='jotheeswarandev'
 # --------------------------------------------------------------------------------
 
 # ---------- Env vars for basic/common setup (can be optionally changed) ---------

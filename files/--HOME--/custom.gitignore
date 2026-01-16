@@ -70,6 +70,8 @@
 /.clamtk
 /.codetogether/team-settings.txt
 /.colima/
+/.config/AWS VPN Client/
+/.config/AWSVPNClient/
 /.config/caffeine/log
 /.config/coc/extensions/package.json
 /.config/coc/memos.json
@@ -78,6 +80,12 @@
 /.config/gatsby/config.json
 /.config/gatsby/events.json
 /.config/gatsby/sites/
+/.config/gcloud/
+/.pgadmin/pgadmin*log*
+/.pgadmin/sessions/
+/.python_history
+/.th-client/*.json
+/.vim/.*whist
 /.config/git/gitk
 /.config/iterm2/AppSupport
 /.config/jgit/config
@@ -255,6 +263,10 @@ tmp/
 /.config/rubocop/config.yml
 /.config/zed/settings.json
 /.config/zsh/*
+/.config/karabiner*
+/.config/nvim*
+/.config/tmux*
+/.config/yazi*
 /.curlrc
 /.default-gems
 /.editorconfig

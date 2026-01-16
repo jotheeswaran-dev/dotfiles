@@ -8,7 +8,6 @@
 // command palette (cmd-shift-p / ctrl-shift-p)
 {
   "buffer_font_family": "MesloLGM Nerd Font",
-  "icon_theme": "VSCode Icons for Zed (Dark)",
   "agent": {
     "favorite_models": [
       {
@@ -21,7 +20,7 @@
     "model_parameters": [],
     "default_model": {
       "provider": "ollama",
-      "model": "deepseek-coder-v2:latest",
+      "model": "deepseek-coder-v2:latest"
     },
     "enabled": true,
     "button": true,
@@ -52,23 +51,23 @@
       {
         "provider": "zed.dev",
         "model": "gemini-2.0-flash"
-      },
+      }
     ],
-    "show_turn_stats": true,
+    "show_turn_stats": true
   },
   // "disable_ai": true,
   "hard_tabs": false,
   "calls": {
-    "mute_on_join": true,
+    "mute_on_join": true
   },
   "terminal": {
     "copy_on_select": true,
     "detect_venv": "off",
-    "dock": "bottom",
+    "dock": "bottom"
   },
   "git_panel": {
     "tree_view": true,
-    "sort_by_path": true,
+    "sort_by_path": true
   },
   "title_bar": {
     "show_menus": true,
@@ -100,19 +99,28 @@
     "current_line_highlight": "all"
   },
   "sticky_scroll": {
-    "enabled": true,
+    "enabled": true
   },
   "base_keymap": "Atom",
   "telemetry": {
     "diagnostics": false,
-    "metrics": false,
+    "metrics": false
+  },
+  "session": {
+    "trust_all_worktrees": true
+  },
+  "vim_mode": true,
+  "icon_theme": {
+    "mode": "dark",
+    "light": "Zed (Default)",
+    "dark": "Zed (Default)"
   },
   "ui_font_size": 16,
-  "buffer_font_size": 16,
+  "buffer_font_size": 15,
   "theme": {
-    "mode": "system",
+    "mode": "dark",
     "light": "One Light",
-    "dark": "VSCode Dark Modern",
+    "dark": "VSCode Dark Modern"
   },
   "when_closing_with_no_tabs": "keep_window_open",
   "preferred_line_length": 120,
@@ -148,7 +156,7 @@
     "**/coverage",
     "**/.cache",
     "**/.*.zwc*",
-    "**/*.zwc*",
+    "**/*.zwc*"
   ],
   "file_scan_inclusions": [
     "**/.env*"
@@ -189,7 +197,7 @@
     "vscode-dark-modern": true,
     "vscode-icons": true,
     "xml": true,
-    "yaml": true,
+    "yaml": true
     // "graphql": true,
     // "nginx": true,
     // "python": true,
@@ -356,7 +364,7 @@
   },
   "file_types": {
     "ini": [
-      ".gitconfig*",
+      ".gitconfig*"
     ],
     "JSONC": ["*.json"],
     "Shell Script": [
@@ -364,7 +372,7 @@
       "*.env*",
       "*.sh",
       ".env*",
-      ".gitignore*",
+      ".gitignore*"
     ],
     "Dockerfile": ["Dockerfile*"],
     "Ruby": [
@@ -385,8 +393,9 @@
       "Podfile",
       "Rakefile",
       "Thorfile",
-      "Vagrantfile",
+      "Vagrantfile"
     ],
     "ERB": ["*.erb", "*.html.erb", "*.heex", "*.leex"],
-  },
+    "dark": "Catppuccin Macchiato"
+  }
 }

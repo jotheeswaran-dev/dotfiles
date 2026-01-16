@@ -234,6 +234,18 @@ if command_exists tmux; then
   alias tmuxa='tmux attach -t'          # attach to a named tmux session
 fi
 
+if command_exists fzf; then
+  alias vf='selected=$(fzf --preview="bat --color=always --style=plain {}" --bind K:preview-up,J:preview-down,esc:abort --prompt "Please select a file to edit: ") && [ -n "$selected" ] && vim "$selected"'
+  alias fhe="eval \$(history | fzf --tac | sed 's/ *[0-9]* *//')"
+  alias fhc="history | fzf --tac | sed 's/ *[0-9]* *//' | pbcopy"
+
+  if command_exists gh; then
+    ghpr() {
+      GH_FORCE_TTY=100% gh pr list | fzf --ansi --preview 'GH_FORCE_TTY=100% gh pr view {1}' --preview-window down --header-lines 3 | awk '{print $1}' | xargs gh pr checkout
+    }
+  fi
+fi
+
 # convert from pdf to png without losing quality
 pdf_to_png() {
   if [[ $# -ne 1 ]]; then
