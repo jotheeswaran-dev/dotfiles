@@ -228,6 +228,7 @@
   symlinks = false
   untrackedCache = true
   whitespace = fix
+	editor = nvim
 [diff]
   algorithm = histogram
   colorMoved = plain
