@@ -2,6 +2,36 @@ As documented in the README's [adopting](README.md#how-to-adoptcustomize-the-scr
 
 For those who follow this repo, here's the changelog for ease of adoption:
 
+### 3.0.18
+
+* *[.gitconfig]* Enabled `init.defaultRefFormat = reftable` (removed the TODO/commented-out placeholder). All new and freshly-cloned repos will automatically use the reftable ref storage format; pre-existing repos are unaffected and do not need to be converted (though migration is possible — see below).
+* *[.shellrc]* Activated reftable support in `clone_repo_into`: the `git clone` call now passes `-c init.defaultRefFormat=reftable`, and the `.git/HEAD` fixup (writing the correct `ref: refs/heads/<branch>` after the clone-via-move) is now always applied.
+* *[recreate-repo.sh]* `git init` now uses `--ref-format=reftable`.
+
+#### Adopting these changes
+
+* Rebase from upstream, resolve conflicts, and then proceed with the following steps in all open terminals:
+
+  ```bash
+  source "${HOME}/.shellrc"
+  ```
+
+* New repos created or cloned after this change will automatically use git's reftable format — *no further action is needed for them*.
+
+* *(Optional)* Pre-existing repos (cloned before this change), will continue to work with the legacy loose-ref format. If you wish to migrate them to reftable for consistency, you can run the following to migrate all repos found directly under `${HOME}` in one shot:
+
+  ```bash
+  find "${HOME}" -mindepth 1 -maxdepth 9 -type d -name '.git' 2>/dev/null | while read -r git_dir; do
+    repo="${git_dir%/.git}"
+    git -C "${repo}" refs migrate --ref-format=reftable
+    # Fix .git/HEAD if it still contains a ".invalid" placeholder
+    real_ref="$(git -C "${repo}" symbolic-ref HEAD 2>/dev/null)"
+    [[ -n "${real_ref}" ]] && echo "ref: ${real_ref}" > "${git_dir}/HEAD"
+  done
+  ```
+
+  > **Note:** `git refs migrate` requires Git ≥ 2.45. Verify with `git --version` before running. Each repo must have a clean working tree and no ongoing operations (rebase, merge, cherry-pick, etc.) for the migration to succeed.
+
 ### 3.0.17
 
 * *[Brewfile, .zshrc]* Replaced `powerlevel10k` with `starship`.

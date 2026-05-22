@@ -442,21 +442,18 @@ clone_repo_into() {
     # Since git does not allow cloning into a non-empty folder (like the home folder), clone into a temp folder, then copy the .git folder into the real target location, and do a checkout
     local tmp_folder="$(mktemp -d)"
     # Note: Do not use --depth while cloning since that messes up when using upstream to rebase from
-    GIT_SSH_COMMAND="ssh -o ConnectTimeout=20" git -C "${tmp_folder}" clone -q "${1}" .
-
-    # TODO: Currently (as of 2026-05-21), p10k does not support git's reftables format (the shell prompt does not display vcs_info correctly). Replace the above line and uncomment the following line when that issue is fixed and p10k supports reftables, since that will speed up git operations significantly.
-    # GIT_SSH_COMMAND="ssh -o ConnectTimeout=20" git -C "${tmp_folder}" clone -q -c init.defaultRefFormat=reftable "${1}" .
+    GIT_SSH_COMMAND="ssh -o ConnectTimeout=20" git -C "${tmp_folder}" clone -q -c init.defaultRefFormat=reftable "${1}" .
 
     mv "${tmp_folder}/.git" "${target_folder}"
     rm -rf "${tmp_folder}"
     git -C "${target_folder}" restore .
 
-    # TODO: Currently (as of 2026-05-21), p10k does not support git's reftables format (the shell prompt does not display vcs_info correctly). Uncomment the following lines when that issue is fixed and p10k supports reftables, since that will speed up git operations significantly.
     # Correct HEAD file after reftable clone-via-mv (.git/HEAD retains a '.invalid' placeholder since
     # the move bypasses git's normal post-clone finalisation; shell prompts read .git/HEAD directly)
-    # local _real_ref; _real_ref="$(git -C "${target_folder}" symbolic-ref HEAD 2>/dev/null)"
-    # [[ -n "${_real_ref}" ]] && echo "ref: ${_real_ref}" > "${target_folder}/.git/HEAD"
-    # unset _real_ref
+    local real_ref
+    real_ref="$(git -C "${target_folder}" symbolic-ref HEAD 2>/dev/null)"
+    [[ -n "${real_ref}" ]] && echo "ref: ${real_ref}" > "${target_folder}/.git/HEAD"
+    unset real_ref
 
     success "Successfully cloned '$(yellow "${1}")$(green "' into '")$(yellow "${target_folder}")$(green "'")"
 

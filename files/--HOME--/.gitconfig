@@ -424,8 +424,7 @@
   version = 4                     # More efficient index format with path prefix compression
 [init]
   defaultBranch = master
-  # TODO: Currently (as of 2026-05-21), p10k does not support git's reftables format (the shell prompt does not display vcs_info correctly). Uncomment the following line when that issue is fixed and p10k supports reftables, since that will speed up git operations significantly.
-  # defaultRefFormat = reftable
+  defaultRefFormat = reftable
 [interactive]
   diffFilter = diff-so-fancy --patch
 [maintenance]

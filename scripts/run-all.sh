@@ -57,7 +57,7 @@ main() {
   [[ "${FILTER}" != '' ]] && echo "$(yellow "Filtering with: $(cyan "${FILTER}")")"
 
   # Find all .git directories and store their parent directory
-  local dir_array=("${(@f)$(find "${FOLDER}" -mindepth "${MINDEPTH}" -maxdepth "${MAXDEPTH}" -type d -name '.git' -exec dirname {} \; 2>/dev/null  | grep -iE "${FILTER}" | sort -u)}")
+  local dir_array=("${(@f)$(find "${FOLDER}" -mindepth "${MINDEPTH}" -maxdepth "${MAXDEPTH}" -type d -name '.git' -exec dirname {} \; 2>/dev/null | grep -iE "${FILTER}" | sort -u)}")
 
   TOTAL_COUNT=${#dir_array[@]}
 
