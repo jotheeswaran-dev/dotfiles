@@ -2,6 +2,32 @@ As documented in the README's [adopting](README.md#how-to-adoptcustomize-the-scr
 
 For those who follow this repo, here's the changelog for ease of adoption:
 
+### 3.0.17
+
+* *[Brewfile, .zshrc]* Replaced `powerlevel10k` with `starship`.
+* The new starship prompt configuration mirrors the previous p10k rainbow setup:
+  * Left prompt: OS icon (white bg) → directory (blue bg, full path from `~`, repo root bolded) → git branch + status + `.git` folder size (green bg, powerline separators)
+  * Right prompt: exit status (✔ green / ✘ red) → command duration ≥3s (cyan bg) → background jobs → username@hostname (SSH/root only) → time (white bg, 12h format)
+  * Git status symbols match previous p10k custom formatter: `⇣⇡` behind/ahead, `~` conflicts, `+` staged, `!` unstaged, `?` untracked, `*` stashes
+  * Powerline arrow separators (`\uE0B0` / `\uE0B2`) between all segments
+  * Direnv segment disabled (always visible due to `~/.envrc`; not useful)
+  * `command_timeout = 2000ms` to allow `du` (git size) to complete on large repos
+
+#### Adopting these changes
+
+* Rebase from upstream, resolve conflicts, and then proceed with the following steps:
+
+  ```bash
+  cp "${DOTFILES_DIR}/files/--HOME--/custom.gitignore" "${HOME}/.gitignore"
+  "${DOTFILES_DIR}/scripts/install-dotfiles.rb"
+  rm -f "${HOME}/.p10k.zsh"
+  brew install starship
+  brew uninstall powerlevel10k || true
+  brew untap 'romkatv/powerlevel10k' || true
+  ```
+
+* Quit and restart the Terminal application.
+
 ### 3.0.16
 
 * *[fresh-install-of-osx.sh]* Fixed issue where this script was failing silently on the first run on a vanilla OS (root cause: curl timeout within homebrew while downloading installables). Replaced the `HOMEBREW_BASE_INSTALL` variable with `FIRST_INSTALL` and added a guard which disables the ERR trap during brew operations, forces re-download of `.shellrc`, sets a long curl timeout (`--max-time 3600`), splits `brew bundle` into separate tap/formula/cask passes for better isolation and resilience, and restores the trap + unsets the extra curl args afterwards.
