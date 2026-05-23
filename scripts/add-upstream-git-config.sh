@@ -18,12 +18,13 @@ usage() {
   exit 1
 }
 
+# retrieve the URL for a given remote name from target_folder
 get_remote_url() {
-  local remote_name="${1:-origin}"
+  local folder="${1}" remote_name="${2}"
   local remote_url
-  if git -C "${target_folder}" remote | grep -q "^${remote_name}$"; then
-    if ! remote_url=$(git -C "${target_folder}" remote get-url "${remote_name}" 2>/dev/null); then
-      error "Could not retrieve URL for remote '${remote_name}' in '$(yellow "${target_folder}")'. Does the remote exist?"
+  if git -C "${folder}" remote | grep -q "^${remote_name}$"; then
+    if ! remote_url=$(git -C "${folder}" remote get-url "${remote_name}" 2>/dev/null); then
+      error "Could not retrieve URL for remote '${remote_name}' in '$(yellow "${folder}")'. Does the remote exist?"
       return 1
     fi
   fi
@@ -66,7 +67,7 @@ main() {
 
   # Check if an 'upstream' remote already exists
   local existing_upstream
-  existing_upstream="$(get_remote_url upstream)"
+  existing_upstream="$(get_remote_url "${target_folder}" upstream)"
   if is_non_zero_string "${existing_upstream}"; then
     warn "Remote 'upstream' already exists for the repo in '$(yellow "${target_folder}")': '$(yellow "${existing_upstream}")'"
     return 0 # Success, nothing to do
@@ -74,7 +75,7 @@ main() {
 
   # Get the URL of the 'origin' remote using 'git remote get-url'
   local origin_remote_url
-  if ! origin_remote_url="$(get_remote_url origin)"; then
+  if ! origin_remote_url="$(get_remote_url "${target_folder}" origin)"; then
     error "Could not retrieve URL for remote 'origin' in '$(yellow "${target_folder}")'. Does the remote exist?"
     return 1
   fi

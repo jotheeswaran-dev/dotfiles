@@ -10,6 +10,12 @@ set -e
 # Source helpers only once if any required function is missing
 type is_shellrc_sourced &>/dev/null || source "${HOME}/.shellrc"
 
+# Print an info banner about which program is being linked
+print_link_info() {
+  info "$(yellow 'Linking') $(purple "${1}") $(yellow 'for command-line invocation')"
+}
+
+# Create or update a symlink from source to dest if the source executable exists
 replace_symlink_if_needed() {
   if is_executable "${1}"; then
     # Check if target exists and is already the correct symlink
@@ -22,10 +28,6 @@ replace_symlink_if_needed() {
   else
     warn "Skipping symlinking since executable '$(yellow "${1}")' was not found"
   fi
-}
-
-print_link_info() {
-  info "$(yellow 'Linking') $(purple "${1}") $(yellow 'for command-line invocation')"
 }
 
 # This removal is required for completions from other plugins to work (for eg git-extras)

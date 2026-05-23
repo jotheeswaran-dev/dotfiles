@@ -15,8 +15,19 @@ type is_shellrc_sourced &>/dev/null || source "${HOME}/.shellrc"
 vacuum_browser_profile_folder() {
   local browser_name="${1}"   # Passed browser name
   local profile_folder="${2}" # Profile folder path
-  # Note: this function reads from the outer-scope arrays `file_patterns` and
-  # `dir_patterns`, which must be populated before calling this function.
+  local dry_run="${3}"        # Dry-run flag (1 = dry-run)
+  local show_stats="${4}"     # Show statistics flag (1 = show stats)
+
+  # Read pattern files from DOTFILES_DIR
+  local -a file_patterns dir_patterns
+  local file_patterns_file="${DOTFILES_DIR}/scripts/data/cleanup-browser-files.txt"
+  local dir_patterns_file="${DOTFILES_DIR}/scripts/data/cleanup-browser-dirs.txt"
+  if is_file "${file_patterns_file}"; then
+    file_patterns=("${(@f)$(grep -vE '^\s*#|^\s*$' "${file_patterns_file}")}")
+  fi
+  if is_file "${dir_patterns_file}"; then
+    dir_patterns=("${(@f)$(grep -vE '^\s*#|^\s*$' "${dir_patterns_file}")}")
+  fi
 
   if pgrep -i -f -q "${browser_name}"; then
     warn "Shutdown '$(yellow "${browser_name}")' first!; skipping processing of files for ${browser_name}"
@@ -155,23 +166,6 @@ main() {
   local script_start_time=$(date +%s)
   print_script_start
 
-  # Pre-read patterns from files
-  local -a file_patterns dir_patterns
-  local file_patterns_file="${DOTFILES_DIR}/scripts/data/cleanup-browser-files.txt"
-  local dir_patterns_file="${DOTFILES_DIR}/scripts/data/cleanup-browser-dirs.txt"
-
-  if is_file "${file_patterns_file}"; then
-    file_patterns=("${(@f)$(grep -vE '^\s*#|^\s*$' "${file_patterns_file}")}") || warn "Failed to read file patterns from '${file_patterns_file}'"
-  else
-    warn "File patterns file not found: '${file_patterns_file}'"
-  fi
-
-  if is_file "${dir_patterns_file}"; then
-    dir_patterns=("${(@f)$(grep -vE '^\s*#|^\s*$' "${dir_patterns_file}")}") || warn "Failed to read directory patterns from '${dir_patterns_file}'"
-  else
-    warn "Directory patterns file not found: '${dir_patterns_file}'"
-  fi
-
   # Define browsers and their profile folders
   # Key: Browser name (used for process check)
   # Value: Absolute path to the profile folder
@@ -187,7 +181,7 @@ main() {
   # Loop through defined browsers and process them
   local browser_name profile_folder
   for browser_name profile_folder in "${(@kv)browser_profiles}"; do
-    vacuum_browser_profile_folder "${browser_name}" "${profile_folder}"
+    vacuum_browser_profile_folder "${browser_name}" "${profile_folder}" "${dry_run}" "${show_stats}"
   done
 
   print_script_duration "${script_start_time}"

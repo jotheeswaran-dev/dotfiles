@@ -2,7 +2,7 @@
 
 # vim:filetype=zsh syntax=zsh tabstop=2 shiftwidth=2 softtabstop=2 expandtab autoindent fileencoding=utf-8
 
-# This script will find all git repositories within the specified 'FOLDER' (defaults to current dir) filtered by 'FILTER' (defaults to empty string; accepts regex) and for a minimum depth of 'MINDEPTH' (optional; defaults to 1) and a maximum depth of 'MAXDEPTH' (optional; defaults to 3); and then runs the specified commands in each of those git repos. This script is not limited to only running 'git' commands!
+# This script will find all git repositories within the specified 'FOLDER' (defaults to current dir) filtered by 'FILTER' (defaults to empty string; accepts regex) and for a minimum depth of 'MINDEPTH' (optional; defaults to 1) and a maximum depth of 'MAXDEPTH' (optional; defaults to 4); and then runs the specified commands in each of those git repos. This script is not limited to only running 'git' commands!
 
 # Exit immediately if a command exits with a non-zero status.
 set -euo pipefail
@@ -48,41 +48,43 @@ main() {
   script_start_time=$(date +%s)
   print_script_start
 
-  MINDEPTH=${MINDEPTH:-1}
-  MAXDEPTH=${MAXDEPTH:-3}
-  FOLDER="${FOLDER:-.}"
-  FILTER="${FILTER:-}"
+  local mindepth maxdepth folder filter
+  mindepth="${MINDEPTH:-1}"
+  maxdepth="${MAXDEPTH:-4}"
+  folder="${FOLDER:-.}"
+  filter="${FILTER:-}"
+  local total_count count dir repo
 
-  echo "$(yellow "Finding git repos starting in folder '$(cyan "$(replace_home_with_tilde "${FOLDER}")")' for a min depth of $(cyan "${MINDEPTH}") and max depth of $(cyan "${MAXDEPTH}")")"
-  [[ "${FILTER}" != '' ]] && echo "$(yellow "Filtering with: $(cyan "${FILTER}")")"
+  echo "$(yellow "Finding git repos starting in folder '$(cyan "$(replace_home_with_tilde "${folder}")")' for a min depth of $(cyan "${mindepth}") and max depth of $(cyan "${maxdepth}")")"
+  [[ "${filter}" != '' ]] && echo "$(yellow "Filtering with: $(cyan "${filter}")")"
 
   # Find all .git directories and store their parent directory
-  local dir_array=("${(@f)$(find "${FOLDER}" -mindepth "${MINDEPTH}" -maxdepth "${MAXDEPTH}" -type d -name '.git' -exec dirname {} \; 2>/dev/null | grep -iE "${FILTER}" | sort -u)}")
+  local dir_array=("${(@f)$(find "${folder}" -mindepth "${mindepth}" -maxdepth "${maxdepth}" -type d -name '.git' -exec dirname {} \; 2>/dev/null | grep -iE "${filter}" | sort -u)}")
 
-  TOTAL_COUNT=${#dir_array[@]}
+  total_count=${#dir_array[@]}
 
   # Track failures
   local -a failed_repos=()
   local -a successful_repos=()
 
-  COUNT=1
+  count=1
   for dir in "${dir_array[@]}"; do
     if is_directory "${dir}" && ! is_symbolic_link "${dir}"; then
-      info "[${COUNT} of ${TOTAL_COUNT}] '$(yellow "$*")' in '$(cyan "$(replace_home_with_tilde "${dir}")")'"
+      info "[${count} of ${total_count}] '$(yellow "$*")' in '$(cyan "$(replace_home_with_tilde "${dir}")")'"
       if (cd "${dir}" && eval "$@"); then
         successful_repos+=("${dir}")
       else
         failed_repos+=("${dir}")
         warn "Command failed in: $(replace_home_with_tilde "${dir}")"
       fi
-      ((COUNT++))
+      ((count++))
     fi
   done
 
   # Report summary
   echo ""
   section_header "$(yellow 'Summary')"
-  echo "Total repositories: ${TOTAL_COUNT}"
+  echo "Total repositories: ${total_count}"
   echo "Successful: $(green ${#successful_repos[@]})"
   if [[ ${#failed_repos[@]} -gt 0 ]]; then
     echo "Failed: $(red ${#failed_repos[@]})"

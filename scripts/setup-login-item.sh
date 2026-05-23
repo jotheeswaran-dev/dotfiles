@@ -2,7 +2,7 @@
 
 # vim:filetype=zsh syntax=zsh tabstop=2 shiftwidth=2 softtabstop=2 expandtab autoindent fileencoding=utf-8
 
-# This script is used to run some commands at the end of the 'brew bundle' command. They are not inlined into the Brewfile due to the need to escape quoted strings.
+# This script is used to add an app as a macOS login item if not already present.
 
 # Exit immediately if a command exits with a non-zero status.
 set -e

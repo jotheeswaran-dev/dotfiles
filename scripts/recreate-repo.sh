@@ -21,8 +21,23 @@ usage() {
   exit 1
 }
 
+# Extract the specified git config value from the git repo in the specified folder
 extract_git_config_value() {
-  git -C "${folder}" config --get "${1}" || error "Failed to get git config value '${1}' for folder '${folder}'"
+  git -C "${1}" config --get "${2}" || error "Failed to get git config value '${2}' for folder '${1}'"
+}
+
+# Script-level global for the trap handler that restores crontab on failure; assigned in main()
+cron_backup_file=""
+_cleanup_recreate() {
+  local exit_code=$?
+  if [[ ${exit_code} -ne 0 ]]; then
+    warn "Script exited with error code ${exit_code}."
+    if [[ -s "${cron_backup_file}" ]]; then
+      warn 'Attempting to restore cron jobs from backup...'
+      restore_cron "${cron_backup_file}" && success 'Restored crontab from backup.'
+    fi
+  fi
+  rm -f "${cron_backup_file}"
 }
 
 main() {
@@ -59,29 +74,14 @@ main() {
 
   ! is_git_repo "${folder}" && error "'${folder}' is not a git repo. Please specify the root of a git repo to proceed. Aborting!!!"
 
-  echo "$(yellow 'Processing folder'): '${folder}'"
-  echo "$(yellow 'Squash commits (will lose history!)'): '${force}'"
+  section_header "$(yellow 'Processing folder'): '$(cyan "${folder}")'"
+  info "$(yellow 'Squash commits (will lose history!)'): '$(cyan "${force}")'"
 
   # Backup crontab and set up a trap to restore it on exit.
-  local CRON_BACKUP_FILE
-  CRON_BACKUP_FILE="$(mktemp)"
+  cron_backup_file="$(mktemp)"
   # Save current crontab; ignore errors if it's empty.
-  crontab -l >"${CRON_BACKUP_FILE}"  2>/dev/null  || true # Backup crontab, ignore failure if empty
-
-  cleanup() {
-    local exit_code=$?
-    # Restore crontab from backup only if the script fails.
-    if [[ ${exit_code} -ne 0 ]]; then
-      warn "Script exited with error code ${exit_code}."
-      if [[ -s "${CRON_BACKUP_FILE}" ]]; then
-        warn 'Attempting to restore cron jobs from backup...'
-        restore_cron "${CRON_BACKUP_FILE}" && success 'Restored crontab from backup.'
-      fi
-    fi
-    # Clean up the backup file on any exit.
-    rm -f "${CRON_BACKUP_FILE}"
-  }
-  trap cleanup EXIT
+  crontab -l >"${cron_backup_file}"  2>/dev/null  || true # Backup crontab, ignore failure if empty
+  trap _cleanup_recreate EXIT
 
   # Remove crontab while this script is running. The trap will restore it on failure.
   crontab -r &>/dev/null  || true
@@ -91,15 +91,15 @@ main() {
   local git_user_name
   local git_user_email
   local git_branch_name
-  git_url="$(extract_git_config_value remote.origin.url)"
-  git_user_name="$(extract_git_config_value user.name)"
-  git_user_email="$(extract_git_config_value user.email)"
+  git_url="$(extract_git_config_value "${folder}" remote.origin.url)"
+  git_user_name="$(extract_git_config_value "${folder}" user.name)"
+  git_user_email="$(extract_git_config_value "${folder}" user.email)"
   git_branch_name="$(git -C "${folder}" branch --show-current)"
   is_zero_string "${git_branch_name}" && error 'Failed to determine current branch name'
 
-  echo "$(yellow 'Repo url'): '${git_url}'"
-  echo "$(yellow 'User name'): '${git_user_name}'"
-  echo "$(yellow 'User email'): '${git_user_email}'"
+  info "$(yellow 'Repo url'): '$(cyan "${git_url}")'"
+  info "$(yellow 'User name'): '$(cyan "${git_user_name}")'"
+  info "$(yellow 'User email'): '$(cyan "${git_user_email}")'"
 
   # Before deleting the current git information, ensure that keybase is installed and logged in (if the remote url is a keybase url). This is to avoid a scenario where we delete the git history and then fail to push to the remote due to authentication issues.
   if [[ "${git_url}" =~ 'keybase' ]]; then
@@ -108,7 +108,7 @@ main() {
       exit 1 # Irrecoverable failure
     fi
 
-    section_header "$(yellow 'Logging into keybase')"
+    debug "$(yellow 'Logging into keybase')"
     if keybase status --json 2>/dev/null | \grep -q '"logged_in":true'; then
       warn "Skipping keybase login since '$(yellow "${KEYBASE_USERNAME}")' is already logged in"
     elif ! keybase login; then
@@ -137,12 +137,12 @@ main() {
   git -C "${folder}" add -A .
   git -C "${folder}" amq
 
-  echo "Compressing '${folder}'"
+  debug "Compressing '$(yellow "${folder}")'"
   git -C "${folder}" rfc
   SKIP_SIZE_BEFORE=1 git -C "${folder}" cc
 
   if [[ "${git_url}" =~ 'keybase' ]]; then
-    echo "$(blue 'Recreating') '$(yellow "${git_url}")'"
+    debug "$(blue 'Recreating') '$(yellow "${git_url}")'"
 
     local git_remote_repo_name
     git_remote_repo_name="$(extract_last_segment "${git_url}")"
@@ -150,10 +150,12 @@ main() {
     keybase git create "${git_remote_repo_name}" || error "Failed to create keybase repo '${git_remote_repo_name}'"
   fi
 
-  echo "$(blue 'Pushing') from $(yellow "${folder}") to $(yellow "${git_url}")"
+  debug "$(blue 'Pushing') from $(yellow "${folder}") to $(yellow "${git_url}")"
   git -C "${folder}" push --progress -fu origin "${git_branch_name}"
 
   rm -f "${folder}/.git/index.lock"
+
+  success "The git repo in '$(yellow "${folder}")' recreated and pushed successfully to '$(yellow "${git_url}")'"
 
   # Resurrect crontab after this script finishes
   load_zsh_configs

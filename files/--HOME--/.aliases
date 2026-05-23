@@ -53,7 +53,7 @@ if command_exists 'run-all.sh'; then
   alias home="FOLDER='${HOME}' FILTER='.bin|.dotfiles|zsh|mise' MAXDEPTH=5 rug"
   is_directory "${PERSONAL_PROFILES_DIR}" && alias profiles="FOLDER='${PERSONAL_PROFILES_DIR}' MAXDEPTH=5 rug"
   if is_directory "${PROJECTS_BASE_DIR}"; then
-    local -A _seen_parent_folders
+    local -A seen_parent_folders
     local -a parent_folders
 
     # process substitution keeps 'while' in the current shell (no subshell for the loop body);
@@ -62,8 +62,8 @@ if command_exists 'run-all.sh'; then
     while IFS= read -r p; do
       local ancestor="${p:h:h}" # parent of .git = repo root; parent of that = first ancestor to check
       while [[ "${ancestor}" != "${PROJECTS_BASE_DIR}" && "${ancestor}" != "/" ]]; do
-        if is_zero_string "${_seen_parent_folders[$ancestor]}"; then
-          _seen_parent_folders[$ancestor]=1
+        if is_zero_string "${seen_parent_folders[$ancestor]}"; then
+          seen_parent_folders[$ancestor]=1
           parent_folders+=("${ancestor}")
         fi
         ancestor="${ancestor:h}"
@@ -126,32 +126,34 @@ resurrect_tracked_repos() {
 }
 
 install_mise_versions() {
-  section_header "$(yellow 'Installing mise all git repos and ancestors')"
+  section_header "$(yellow 'Installing mise in all git repos and ancestors')"
   if ! command_exists mise; then
     warn "Couldn't find 'mise' in the PATH; Skipping loading any mise configs"
     return 0
   fi
 
-  local -A _seen_dirs
-  local -a _all_dirs
+  local -A seen_dirs
+  local -a all_dirs
+  local find_maxdepth=6
+  [[ -n "${FIRST_INSTALL}" ]] && find_maxdepth=3
 
   # Find all git repos under HOME, collect them and every ancestor (including HOME itself)
   while IFS= read -r git_dir; do
     local dir="${git_dir:h}"  # strip the trailing /.git to get the repo root
     while [[ "${dir}" != "/" ]]; do
-      if is_zero_string "${_seen_dirs[$dir]}"; then
-        _seen_dirs[$dir]=1
-        _all_dirs+=("${dir}")
+      if is_zero_string "${seen_dirs[$dir]}"; then
+        seen_dirs[$dir]=1
+        all_dirs+=("${dir}")
       fi
       [[ "${dir}" == "${HOME}" ]] && break  # stop after processing HOME
       dir="${dir:h}"  # walk up one level
     done
-  done < <(find "${HOME}" -maxdepth 9 -type d -name '.git' 2>/dev/null)
+  done < <(find "${HOME}" "${DOTFILES_DIR}" "${PROJECTS_BASE_DIR}" -maxdepth ${find_maxdepth} \( -name 'node_modules' -o -name '.cache' -o -name '.oh-my-zsh' -o -name '.Trash' -o -name 'Library' -o -name 'Caches' \) -prune -o -type d -name '.git' -print 2>/dev/null)
 
   # Sort by depth so parents come before children, then filter to dirs with mise configs
   local mise_configs=('.mise.toml' '.tool-versions' '.ruby-version' '.python-version' '.node-version' '.java-version' '.nvmrc')
   local -a sorted_dirs
-  for dir in "${(@on)_all_dirs}"; do
+  for dir in "${(@on)all_dirs}"; do
     for cfg in "${mise_configs[@]}"; do
       if is_file "${dir}/${cfg}"; then
         sorted_dirs+=("${dir}")
@@ -163,41 +165,99 @@ install_mise_versions() {
   local total=${#sorted_dirs}
   local idx=0
 
+  # Fast check — if nothing is missing across all dirs, skip entire processing loop
+  local all_installed=true
+  for dir in "${sorted_dirs[@]}"; do
+    if ! mise install --dry-run-code -C "${dir}" 2>/dev/null; then
+      all_installed=false
+      break
+    fi
+  done
+
+  if ${all_installed}; then
+    echo "$(green 'All mise tools are already installed')"
+    unset sorted_dirs all_dirs seen_dirs
+    return
+  fi
+
   for dir in "${sorted_dirs[@]}"; do
     ((idx++))
     echo "$(yellow "[${idx}/${total}] processing '${dir}'")"
-    mise trust -C "${dir}" 2>/dev/null
-    mise install -C "${dir}"
+    mise -C "${dir}" trust -y -a
+    if ! mise install --dry-run-code -C "${dir}" 2>/dev/null; then
+      mise -C "${dir}" install
+    fi
   done
   unset sorted_dirs
-  unset _all_dirs
-  unset _seen_dirs
+  unset all_dirs
+  unset seen_dirs
 }
 
-_direnv_process() {
-  if ! command_exists direnv; then
-    warn "Couldn't find 'direnv' in the PATH; Skipping allowing direnv configs for '$(yellow "${1}")'"
-  else
-    if direnv allow "${1}"; then
-      success "Successfully allowed direnv for '$(yellow "${1}")'"
-    else
-      warn "Failed to allow direnv for '${1}'"
-    fi
-  fi
-}
-
-# runs 'direnv allow' on all relevant folders
 allow_all_direnv_configs() {
-  find "${HOME}" -maxdepth 1 -name '.envrc' -print0 | while IFS= read -r -d '' file; do
-    _direnv_process "${file:h}"
+  section_header "$(yellow 'Allowing direnv configs in all git repos and ancestors')"
+  if ! command_exists direnv; then
+    warn "Couldn't find 'direnv' in the PATH; Skipping allowing any direnv configs"
+    return 0
+  fi
+
+  local -A seen_dirs
+  local -a all_dirs
+  local find_maxdepth=6
+  [[ -n "${FIRST_INSTALL}" ]] && find_maxdepth=3
+
+  # Find all git repos under HOME, collect them and every ancestor (including HOME itself)
+  while IFS= read -r git_dir; do
+    local dir="${git_dir:h}"  # strip the trailing /.git to get the repo root
+    while [[ "${dir}" != "/" ]]; do
+      if is_zero_string "${seen_dirs[$dir]}"; then
+        seen_dirs[$dir]=1
+        all_dirs+=("${dir}")
+      fi
+      [[ "${dir}" == "${HOME}" ]] && break  # stop after processing HOME
+      dir="${dir:h}"  # walk up one level
+    done
+  done < <(find "${HOME}" "${DOTFILES_DIR}" "${PROJECTS_BASE_DIR}" -maxdepth ${find_maxdepth} \( -name 'node_modules' -o -name '.cache' -o -name '.Trash' -o -name 'Library' -o -name 'Caches' \) -prune -o -type d -name '.git' -print 2>/dev/null)
+
+  # Sort by depth so parents come before children, then filter to dirs with .envrc configs
+  local -a sorted_dirs
+  for dir in "${(@on)all_dirs}"; do
+    if is_file "${dir}/.envrc"; then
+      sorted_dirs+=("${dir}")
+    fi
   done
-  is_directory "${PERSONAL_PROFILES_DIR}" && find "${PERSONAL_PROFILES_DIR}" -maxdepth 1 -name '.envrc' -print0 | while IFS= read -r -d '' file; do
-    _direnv_process "${file:h}"
+  local total=${#sorted_dirs}
+  local idx=0
+
+  # Fast check — if nothing is missing across all dirs, skip entire processing loop
+  local all_allowed=true
+  for dir in "${sorted_dirs[@]}"; do
+    pushd "${dir}" &>/dev/null || { all_allowed=false; break }
+    if ! direnv status &>/dev/null; then
+      all_allowed=false
+      popd &>/dev/null || true
+      break
+    fi
+    popd &>/dev/null || true
   done
 
-  is_directory "${PROJECTS_BASE_DIR}" && find "${PROJECTS_BASE_DIR}" -maxdepth 5 -name '.envrc' -print0 | while IFS= read -r -d '' file; do
-    _direnv_process "${file:h}"
+  if ${all_allowed}; then
+    echo "$(green 'All direnv configs are already allowed')"
+    unset sorted_dirs all_dirs seen_dirs
+    return
+  fi
+
+  for dir in "${sorted_dirs[@]}"; do
+    ((idx++))
+    echo "$(yellow "[${idx}/${total}] allowing direnv for '${dir}'")"
+    if direnv allow "${dir}"; then
+      success "Successfully allowed direnv for '$(yellow "${dir}")'"
+    else
+      warn "Failed to allow direnv for '${dir}'"
+    fi
   done
+  unset sorted_dirs
+  unset all_dirs
+  unset seen_dirs
 }
 
 # --------------------------------------------------------------------------
@@ -347,15 +407,15 @@ alias kill_ds='sudo find . -type f -name .DS_Store -print -delete'
 alias kill_loc='sudo find . -type f -name .localized -print -delete'
 
 # Remove trailing spaces
-_remove_trailing_find_cmd="find . -type f \( -name '*.*cs*' -o -name '*.*less' -o -name '*.*js*' -o -name '*.*rb' -o -name '*.*ml' -o -name '*.rake' -o -name '*.java' -o -name '*.ts*' \) -print0"
+remove_trailing_find_cmd="find . -type f \( -name '*.*cs*' -o -name '*.*less' -o -name '*.*js*' -o -name '*.*rb' -o -name '*.*ml' -o -name '*.rake' -o -name '*.java' -o -name '*.ts*' \) -print0"
 if is_linux || is_windows; then
   # Linux/WSL/Cygwin sed uses -i without an argument for backup suffix
-  alias remove_trailing="${_remove_trailing_find_cmd} | xargs -0 sed -i 's/[ ]*$//'"
+  alias remove_trailing="${remove_trailing_find_cmd} | xargs -0 sed -i 's/[ ]*$//'"
 elif is_macos; then
   # macOS sed requires an argument for -i ('' for no backup)
-  alias remove_trailing="${_remove_trailing_find_cmd} | xargs -0 sed -i '' 's/[ ]*$//'"
+  alias remove_trailing="${remove_trailing_find_cmd} | xargs -0 sed -i '' 's/[ ]*$//'"
 fi
-unset _remove_trailing_find_cmd
+unset remove_trailing_find_cmd
 
 # npm
 command_exists npm && alias npm_cleanup='npm cache clear --force'

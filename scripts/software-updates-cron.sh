@@ -11,6 +11,7 @@
 type is_shellrc_sourced &>/dev/null || source "${HOME}/.shellrc"
 load_zsh_configs
 
+# Run a single update step if the check command is available
 perform_update() {
   local title="${1}"
   local check_cmd="${2}"
@@ -33,7 +34,8 @@ perform_update() {
 main() {
   local script_start_time
   script_start_time=$(date +%s)
-  _SCRIPT_START_TIME=${script_start_time}
+  SCRIPT_START_TIMES+=("${script_start_time}")
+  local model tracked_file f folder
   print_script_start
 
   # brew doctor # Removed for cron job efficiency

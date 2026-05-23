@@ -12,9 +12,9 @@ require 'optparse'
 
 options = {}
 parser = OptionParser.new do |opts|
-  opts.banner = "Usage: #{File.basename(__FILE__)} [-g <folder>] [-r <config-file>] [-c <config-file>]"
+  opts.banner = "#{'Usage'.red}: #{File.basename(__FILE__).yellow} [-g <folder>] [-r <config-file>] [-c <config-file>]"
   opts.separator ''
-  opts.separator 'Options:'
+  opts.separator 'Options:'.pink
   opts.on('-g', '--generate FOLDER', 'Generate configuration from FOLDER onto stdout (usually on current laptop)',
           "  Note: this option will not handle 'post_clone' commands in the generated yaml structure") do |folder|
     options[:generate] = folder
@@ -25,14 +25,14 @@ parser = OptionParser.new do |opts|
   opts.on('-c', '--check CONFIG_FILE', "Verify 'known' codebases from CONFIG_FILE") do |file|
     options[:check] = file
   end
-  opts.separator ''
-  opts.separator 'Environment variables:'
-  opts.separator "  FILTER      can be used to apply the operation to a subset of codebases (will match on folder or repo name)"
-  opts.separator "  REF_FOLDER  can be used to apply a filter when verifying against a specific yaml file"
   opts.on('-h', '--help', 'Show this help message') do
     puts opts
     exit
   end
+  opts.separator ''
+  opts.separator 'Environment variables:'.pink
+  opts.separator "  #{'FILTER'.yellow}      can be used to apply the operation to a subset of codebases (will match on folder or repo name)"
+  opts.separator "  #{'REF_FOLDER'.yellow}  can be used to apply a filter when verifying against a specific yaml file"
 end
 begin
   parser.parse!
@@ -49,8 +49,7 @@ if options.empty? || options.keys.length > 1
 end
 
 require 'fileutils'
-require 'optparse'
-require 'pathname' # NOTE: This has been added explicitly due to the default version of ruby (2.6) on a vanilla macos. Once the default ruby upgrades to 3.x, we can remove
+require 'pathname' # NOTE: This has been added explicitly due to the default version of ruby (2.6) on a vanilla macos (verified upto Tahoe). Once the default ruby upgrades to 3.x, we can remove this require line.
 require 'set'
 require 'shellwords'
 require 'yaml'
@@ -221,7 +220,7 @@ end
 def read_git_repos_from_file(filename)
   yml_file = File.expand_path(filename)
   puts "Using config file: #{yml_file.replace_home_path_with_tilde.green}"
-  repositories = YAML.load_file(yml_file).select { |repo| repo['active'] }
+  repositories = (YAML.safe_load(File.read(yml_file)) || []).select { |repo| repo['active'] }
   repositories.each do |repo|
     if repo[FOLDER_KEY_NAME].is_a?(String)
       repo[FOLDER_KEY_NAME] = find_and_replace_env_var(repo[FOLDER_KEY_NAME].strip)
@@ -271,9 +270,6 @@ def generate_each(folder)
     hash[OTHER_REMOTES_KEY_NAME] = other_remotes unless other_remotes.empty?
   end
 
-  # Fallback for origin if not found or if the above command failed
-  hash[:remote] ||= find_git_remote_url(folder, ORIGIN_NAME)
-
   # Ensure :remote is set, even if it's an empty string (e.g. repo with no remotes)
   hash[:remote] ||= ''
 
@@ -308,13 +304,13 @@ def resurrect_each(repo, idx, total)
     puts 'Cloning git repo...'.yellow
     # NOTE: clone_repo_into is a shell function defined in .shellrc, so we must invoke a login
     # shell to source it. The remote URL and folder come from a trusted YAML config authored by
-    # the user, but we still use `/bin/bash -c` explicitly (rather than a bare string passed to
+    # the user, but we still use `/bin/zsh -lc` explicitly (rather than a bare string passed to
     # capture3) to make the shell invocation unambiguous and to avoid surprises from $SHELL.
     shellrc = HOME_PATH.join('.shellrc').to_s
     clone_command = "source #{shellrc.shellescape} && clone_repo_into #{repo[REMOTE_KEY_NAME].shellescape} #{folder.shellescape}"
-    _stdout_str, stderr_str, status = Open3.capture3('/bin/bash', '-c', clone_command)
+    _stdout_str, stderr_str, status = Open3.capture3('/bin/zsh', '-lc', clone_command)
 
-    if !status.success? || (!stderr_str.empty? && stderr_str =~ /error/i)
+    unless status.success?
       error_message = "Failed to clone '#{repo[REMOTE_KEY_NAME]}' into '#{folder}'; aborting (status: #{status.exitstatus})".red
       error_message += "\nClone command STDERR:\n#{stderr_str}".red unless stderr_str.strip.empty?
       abort(error_message)
@@ -336,8 +332,7 @@ def resurrect_each(repo, idx, total)
   # Add missing 'other_remotes'
   git_base_cmd = build_git_context(folder)
   if repo[OTHER_REMOTES_KEY_NAME]
-    # Array() on a Hash yields [[key, val], ...]; block destructuring handles the pair unpacking.
-    Array(repo[OTHER_REMOTES_KEY_NAME]).each do |name, remote|
+    (repo[OTHER_REMOTES_KEY_NAME] || {}).each do |name, remote|
       if !existing_remotes.key?(name) # Check against the fetched list
         puts "Adding remote '#{name}' -> '#{remote}'".blue
         _stdout_add, stderr_add, status_add = Open3.capture3(*git_base_cmd, REMOTE_KEY_NAME, 'add', name, remote)

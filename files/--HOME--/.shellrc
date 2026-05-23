@@ -90,6 +90,8 @@ export HOMEBREW_BAT=1
 export HOMEBREW_VERBOSE_USING_DOTS=1
 export HOMEBREW_BUNDLE_FILE="${HOME}/Brewfile"
 export HOMEBREW_NO_ENV_HINTS=1
+# Note: If the number and size of downloads is large - allow up to 1hr for any single curl transfer.
+export HOMEBREW_CURL_EXTRA_CURL_ARGS='--connect-timeout 300 --max-time 3600'
 # TODO: Uncomment once this feature has stabilized
 # export HOMEBREW_VERIFY_ATTESTATIONS=1
 
@@ -297,23 +299,27 @@ print_script_duration() {
 # 1c. Step timing helpers (used by fresh-install-of-osx.sh for progress)
 # --------------------------------------------------------------------------
 
-# Holds the epoch-second timestamp of the most recent step_start call.
-_STEP_START_TIME=0
-# Holds the epoch-second timestamp of the overall script start; set by
-# step_timing_init (called automatically by step_start on first use).
-_SCRIPT_START_TIME=0
+# Stack of epoch-second timestamps for the overall script-start epoch.
+# Initialised on first use and overridable by sub-scripts that need their
+# own baseline without clobbering an outer script's value.
+typeset -a SCRIPT_START_TIMES=()
+# Stack of epoch-second timestamps for the overall step-start epoch,
+# supporting nested step_start/step_end calls.
+typeset -a STEP_START_TIMES=()
 
-# Initialise the script-level clock.  Safe to call multiple times.
+# Initialise the script-level clock.  Pushes if the stack is empty so the same
+# process can define a later epoch without clobbering the original.  Safe to
+# call multiple times.
 step_timing_init() {
-  if [[ "${_SCRIPT_START_TIME}" -eq 0 ]]; then
-    _SCRIPT_START_TIME=$(date +%s)
+  if [[ ${#SCRIPT_START_TIMES[@]} -eq 0 ]]; then
+    SCRIPT_START_TIMES+=("$(date +%s)")
   fi
 }
 
 # Record the start of a step.  Should be called just before section_header.
 step_start() {
   step_timing_init
-  _STEP_START_TIME=$(date +%s)
+  STEP_START_TIMES+=("$(date +%s)")
 }
 
 # Print how long the most recent step took, plus total elapsed since init.
@@ -321,14 +327,34 @@ step_end() {
   local now delta_step delta_total h m s
   now=$(date +%s)
 
-  delta_step=$(( now - _STEP_START_TIME ))
+  # Pop the most recent step start time from the stack.
+  # If the step stack is empty (e.g. step_end called without a matching
+  # step_start after an error), fall back to the current epoch's start time
+  # from the script timings stack so the duration stays meaningful.
+  local step_start_time
+  if [[ ${#STEP_START_TIMES[@]} -eq 0 ]]; then
+    if [[ ${#SCRIPT_START_TIMES[@]} -gt 0 ]]; then
+      step_start_time="${SCRIPT_START_TIMES[-1]}"
+      warn "step_end called without matching step_start; using current epoch start time as fallback"
+    else
+      step_start_time="${now}"
+      warn "step_end called without any timing stack initialised; using current time as fallback"
+    fi
+  else
+    step_start_time="${STEP_START_TIMES[-1]}"
+    STEP_START_TIMES=("${(@)STEP_START_TIMES[1,-2]}")
+  fi
+
+  delta_step=$(( now - step_start_time ))
   h=$(( delta_step / 3600 ))
   m=$(( (delta_step % 3600) / 60 ))
   s=$(( delta_step % 60 ))
   local step_human
   step_human=$(printf '%dh:%02dm:%02ds' "$h" "$m" "$s")
 
-  delta_total=$(( now - _SCRIPT_START_TIME ))
+  # Use the most recently pushed script-start epoch for total elapsed.
+  local script_start_time="${SCRIPT_START_TIMES[-1]}"
+  delta_total=$(( now - script_start_time ))
   h=$(( delta_total / 3600 ))
   m=$(( (delta_total % 3600) / 60 ))
   s=$(( delta_total % 60 ))
@@ -448,9 +474,14 @@ prepend_to_pkg_config_path_if_dir_exists() {
 # Ask for the administrator password upfront and keep it alive until this script has finished #
 ###############################################################################################
 keep_sudo_alive() {
+  # Avoid duplicate background loops (e.g. when child scripts also call this)
+  if [ -n "$KEEP_SUDO_ALIVE_PID" ] && kill -0 "$KEEP_SUDO_ALIVE_PID" 2>/dev/null; then
+    return
+  fi
   section_header "$(yellow 'Keeping sudo alive till this script has finished')"
   sudo -v
   while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
+  export KEEP_SUDO_ALIVE_PID=$!
 }
 
 build_keybase_repo_url() {

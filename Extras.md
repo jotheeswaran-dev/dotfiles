@@ -1,13 +1,3 @@
-## install-dotfiles.rb
-
-Basically, to get started with the dotfiles, you just need to run the `${DOTFILES_DIR}/scripts/install-dotfiles.rb` script. If you have that folder in the `PATH`, then you don't need the fully qualified or relative location (only file name is enough to run it).
-
-* If you already have any of the dotfiles that are managed via this repo, *DON'T WORRY!* Your files will be moved to the cloned folder - so that you can then commit and push them to your fork!
-* This script will also handle nested config files - as long as they are already present in this repo.
-* Special handling (rename + copy instead of symlink) for `.gitattributes` and `.gitignore` - which means that, *for those files alone*, you will have to **keep them manually in sync**.
-* If you do not want a specific file from the home folder to be overridden, simply delete it from this repo's `files` folder - and it will not be processed.
-* If you wish to add a new file to be tracked and managed via this backup mechanism, simply add it into the `files` folder with the requisite relative path (relative to your `/` folder) - and it will be processed.
-
 ## add-upstream-git-config.sh
 
 This script can be used to quickly add a new upstream remote to the specified git repo. The name of the new remote is hardcoded to `upstream`. The rest of the url remains the same with just the username switched to the specified username.
@@ -19,6 +9,8 @@ This script can be used to quickly add a new upstream remote to the specified gi
 ## capture-prefs.sh
 
 This script is useful to capture the preferences of the known applications (both system-installed and custom-installed applications) using the `defaults read` command. It can be used to both export the preferences/settings (from the old system) or import them (into the new system). As of version 2.0.4, added a new shell function to help with the above called: `find_and_append_prefs`.
+
+The whitelist of preference domains to capture is maintained in [`scripts/data/capture-prefs-domains.txt`](scripts/data/capture-prefs-domains.txt).
 
 ## capture-raycast-configs.sh
 
@@ -40,7 +32,38 @@ Since this script uses applescript internally, it needs to be granted the follow
 
 ## cleanup-browser-profiles.sh
 
-This script is used to cleanup browser profiles folders (delete cache, session and other files that will anyways be recreated when you restart that browser). It can be safely invoked even if that browser is running (in which case it will skip processing after printing a warning to quit that application)
+This script is used to cleanup browser profiles folders (delete cache, session and other files that will anyways be recreated when you restart that browser). It can be safely invoked even if that browser is running (in which case it will skip processing after printing a warning to quit that application).
+
+The lists of files and directories to clean are maintained in [`scripts/data/cleanup-browser-files.txt`](scripts/data/cleanup-browser-files.txt) and [`scripts/data/cleanup-browser-dirs.txt`](scripts/data/cleanup-browser-dirs.txt).
+
+## fresh-install-of-osx.sh
+
+This is the main setup script for a fresh macOS installation. It is idempotent and can be run multiple times safely. The script:
+
+* Detects Intel vs Apple Silicon architecture automatically
+* Installs Homebrew, Oh My Zsh, and Starship prompt
+* Sets up the dotfiles repo and symlinks all config files
+* Installs essential CLI tools and GUI applications via the Brewfile
+* Configures macOS system defaults
+* Sets up SSH keys and permissions
+* Resurrects tracked git repositories
+* Installs programming language versions via mise
+* Restores application preferences from backups
+* Configures cron jobs for ongoing maintenance
+
+The script has two modes controlled by the `FIRST_INSTALL` environment variable: when set to `true`, it performs a minimal bootstrap suitable for a vanilla OS (with extended curl timeouts and relaxed error handling for Homebrew operations). On subsequent runs, it performs the full setup.
+
+See the [GettingStarted](GettingStarted.md) guide for the recommended invocation.
+
+## install-dotfiles.rb
+
+Basically, to get started with the dotfiles, you just need to run the `${DOTFILES_DIR}/scripts/install-dotfiles.rb` script. If you have that folder in the `PATH`, then you don't need the fully qualified or relative location (only file name is enough to run it).
+
+* If you already have any of the dotfiles that are managed via this repo, *DON'T WORRY!* Your files will be moved to the cloned folder - so that you can then commit and push them to your fork!
+* This script will also handle nested config files - as long as they are already present in this repo.
+* Special handling (rename + copy instead of symlink) for `.gitattributes` and `.gitignore` - which means that, *for those files alone*, you will have to **keep them manually in sync**.
+* If you do not want a specific file from the home folder to be overridden, simply delete it from this repo's `files` folder - and it will not be processed.
+* If you wish to add a new file to be tracked and managed via this backup mechanism, simply add it into the `files` folder with the requisite relative path (relative to your `/` folder) - and it will be processed.
 
 ## osx-defaults.sh
 
@@ -48,7 +71,11 @@ This script is the erstwhile script to codify the macos setup. It can be used to
 
 ## post-brew-install.sh
 
-This script is a collection of commands that need to be run after `brew bundle` so as to setup proper command-line usage of some of the gui apps like VSCode, Rancher, etc.
+This script is a collection of commands that need to be run after `brew bundle` so as to setup proper command-line usage of some of the gui apps like VSCode, Rancher, etc. It is invoked from the Brewfile's `at_exit` block and handles:
+
+* Symlinking GUI applications for command-line access (e.g., `code`, `keybase`, `zed`)
+* Removing conflicting zsh completion files
+* Cleaning up legacy executable paths
 
 ## recreate-repo.sh
 

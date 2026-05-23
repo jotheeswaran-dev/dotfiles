@@ -13,8 +13,45 @@
 # Source shell helpers if they aren't already loaded
 type is_shellrc_sourced &>/dev/null || source "${HOME}/.shellrc"
 
+# Script-level flag for silent mode; set by main() when -s is passed
+auto='N'
+
+# Interactive y/n prompt with silent (auto) mode support.
+ask() {
+  local prompt default yn
+  while true; do
+    if [[ "${2}" == 'Y' ]]; then
+      prompt="$(green 'Y')/n"
+      default='Y'
+    elif [[ "${2}" == 'N' ]]; then
+      prompt="y/$(green 'N')"
+      default='N'
+    else
+      prompt='y/n'
+      default=
+    fi
+
+    printf "%s" "${1} [${prompt}] "
+
+    if [[ "${auto}" == 'Y' ]]; then
+      echo
+    else
+      read -r yn
+    fi
+
+    if is_zero_string "${yn}"; then
+      yn="${default}"
+    fi
+
+    case ${yn} in
+      [Yy]) return 0 ;;
+      [Nn]) return 1 ;;
+    esac
+  done
+}
+
 main() {
-  local auto='N'
+  auto='N'
   while getopts 's' opt; do
     case ${opt} in
       s)
@@ -33,39 +70,6 @@ main() {
     error 'Interactive mode needs terminal!'
     exit 1
   fi
-
-  ask() {
-    local prompt default yn
-    while true; do
-      if [[ "${2}" == 'Y' ]]; then
-        prompt="$(green 'Y')/n"
-        default='Y'
-      elif [[ "${2}" == 'N' ]]; then
-        prompt="y/$(green 'N')"
-        default='N'
-      else
-        prompt='y/n'
-        default=
-      fi
-
-      printf "%s" "${1} [${prompt}] "
-
-      if [[ "${auto}" == 'Y' ]]; then
-        echo
-      else
-        read -r yn
-      fi
-
-      if is_zero_string "${yn}"; then
-        yn="${default}"
-      fi
-
-      case ${yn} in
-        [Yy]) return 0 ;;
-        [Nn]) return 1 ;;
-      esac
-    done
-  }
 
   ###############################################################################################
   # Ask for the administrator password upfront and keep it alive until this script has finished #
@@ -164,8 +168,8 @@ main() {
   ###############################################################################
 
   if ask 'Set computer name (as done via System Preferences → Sharing)' 'Y'; then
-    username_in_camel_case=$(echo "$(whoami)" | awk '{$1=toupper(substr($1,0,1))substr($1,2)}1')
-    human_date="$(date '+%Y-%m-%d-%H-%M')"
+    local username_in_camel_case=$(echo "$(whoami)" | awk '{$1=toupper(substr($1,0,1))substr($1,2)}1')
+    local human_date="$(date '+%Y-%m-%d-%H-%M')"
 
     sudo scutil --set ComputerName "IND-CHN-${username_in_camel_case}'s MBP-${human_date}"
     sudo scutil --set HostName "${username_in_camel_case}-${human_date}"

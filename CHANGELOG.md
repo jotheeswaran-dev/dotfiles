@@ -1,6 +1,22 @@
-As documented in the README's [adopting](README.md#how-to-adoptcustomize-the-scripts-to-your-own-settings) section, this repo and its scripts are aimed at developers/techies. If you are stuck or need help in any fashion, you can reach out to the [owner of the the parent repo](https://github.com/vraravam) from where this was forked.
+As documented in the README's [adopting](README.md#how-to-adoptcustomize-the-scripts-to-your-own-settings) section, this repo and its scripts are aimed at developers/techies. If you are stuck or need help in any fashion, you can reach out to the [owner of the parent repo](https://github.com/vraravam) from where this was forked.
 
 For those who follow this repo, here's the changelog for ease of adoption:
+
+### 3.0.21
+
+* *[all shell scripts]* Removed dependencies on globally defined variables or those leaking from other functions (eg `main`) from within the same script. Used local variables as much as possible. Removed underscore prefix from all local variables. Refactored all nested functions to top-level, preserving behavior via zsh's dynamic scoping. Ordered function definitions by invocation flow within each script.
+* *[fresh-install-of-osx.sh]* Promoted `CRON_BACKUP_FILE` from `main()` local to script-level global so the trap handler (`_cleanup_and_exit`) can access it. This script now runs `install_mise_versions &!` in background during `FIRST_INSTALL` to avoid blocking the setup flow.
+* *[.aliases]* Rewrote `install_mise_versions` with a fast-check shortcut that skips processing when all tools are already installed. Broadened search to include `DOTFILES_DIR` and `PROJECTS_BASE_DIR`, pruned noisy directories (`node_modules`, `.Trash`, `.cache`, `Library`, `Caches`). Uses `mise -C <dir> trust/install` syntax. Respects `FIRST_INSTALL` with reduced search depth.
+* *[.aliases]* Rewrote `allow_all_direnv_configs` using the same repo-scanning approach as `install_mise_versions` with a fast-check against `direnv status`. Covers all git repos and their ancestors instead of just `HOME`/`PERSONAL_PROFILES_DIR`/`PROJECTS_BASE_DIR`.
+* *[.shellrc]* Replaced single `_STEP_START_TIME`/`_SCRIPT_START_TIME` scalars with stack-based arrays (`STEP_START_TIMES`, `SCRIPT_START_TIMES`) supporting nested step timing and error resilience. `step_end()` now guards against empty stacks with fallback values and warnings.
+* *[.shellrc]* Added `HOMEBREW_CURL_EXTRA_CURL_ARGS` export (moved out of `fresh-install-of-osx.sh`) so extended curl timeouts are available to all brew operations, not just first-install.
+* *[resurrect-repositories.rb]* Fixed some minor ruby idiomatic issues.
+* *[run-all.sh]* Increased default `MAXDEPTH` from 3 to 4 to catch repos one level deeper.
+
+#### Adopting these changes
+
+* Rebase from upstream, resolve conflicts.
+* Quit and restart the Terminal application.
 
 ### 3.0.20
 
@@ -99,7 +115,7 @@ For those who follow this repo, here's the changelog for ease of adoption:
 * *[recreate-repo.sh]* Added TODO comment for future `git init --ref-format=reftable` support.
 * *[software-updates-cron.sh]* Added a new step to prune tracked Zen session backup files older than 7 days from the browser-profiles repo (compatible with both macOS BSD and GNU `date`).
 * *[.shellrc]* Added `step_start`, `step_end`, and `step_timing_init` helper functions for per-step and total elapsed time reporting in scripts.
-* *[fresh-install-of-osx.sh, software-updates-cron.sh]* Instrumented all major steps with `step_start`/`step_end` calls for granular timing output. Also initialise `_SCRIPT_START_TIME` explicitly so timing is accurate before `.shellrc` is sourced.
+* *[fresh-install-of-osx.sh, software-updates-cron.sh]* Instrumented all major steps with `step_start`/`step_end` calls for granular timing output. Also initialise `SCRIPT_START_TIME` explicitly so timing is accurate before `.shellrc` is sourced.
 * *[Brewfile]* Enabled `cairo`, `gnu-tar`, `mercurial`, and `sccache` (previously commented out) for zen-browser development.
 * *[.zshrc]* Added `gnu-tar` to the list of keg-only Homebrew packages that override macOS defaults. Removed the `git_scripts` path addition.
 * *[.envrc (profiles)]* Temporarily disabled natsumi-browser cloning as a trial. Removed `timeout` wrapper from `add-upstream-git-config.sh` call.
