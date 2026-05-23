@@ -392,6 +392,10 @@ is_file_empty() {
   is_file "${1}" && [[ ! -s "${1}" ]]
 }
 
+is_non_empty_file() {
+  is_file "${1}" && [[ -s "${1}" ]]
+}
+
 is_directory_empty() {
   is_directory "${1}" && is_zero_string "$(ls -A "${1}")"
 }
@@ -561,7 +565,77 @@ eval_shellenv() {
 }
 
 # --------------------------------------------------------------------------
-# 1g. Config reloading (used post-bootstrap to apply changes)
+# 1g. Cron management - bootstrap layer
+#
+# Contains the primitives needed to safely suspend and resume cron around any
+# script that may run before (or during) a fresh install, including before the
+# dotfiles repo has been cloned.  These functions only depend on utilities
+# already defined in this file (is_file, is_non_empty_file, ensure_dir_exists,
+# debug/info/success/warn/error) so they are guaranteed to be available the
+# moment .shellrc is sourced on any machine.
+#
+# The higher-level cron helpers (_create_crontab, recron) live in .aliases
+# because they reference DOTFILES_DIR, HOMEBREW_PREFIX, and other variables
+# that are only meaningful after the dotfiles repo has been cloned and the full
+# shell environment has been set up.  See the matching section in .aliases for
+# those functions and a fuller explanation of the split.
+# --------------------------------------------------------------------------
+
+# Well-known path used by suspend_cron/resume_cron to persist the cron backup
+# across a script run.  Exported so subshells and ERR/EXIT trap handlers share
+# the same path even when they run before .aliases is sourced.
+export CRON_BACKUP_FILE="${TMPDIR:-/tmp}/crontab_backup"
+
+# Loads a cron file into the system crontab.  Shared by suspend_cron/resume_cron
+# (bootstrap layer, here) and recron (.aliases layer) so neither duplicates logic.
+restore_cron() {
+  local cron_file="${1}"
+  if ! is_file "${cron_file}"; then
+    warn "No '$(yellow "${cron_file}")' found; returning without any processing"
+    return 0 # Success, nothing to do
+  fi
+
+  ensure_dir_exists "$(dirname "${cron_file}")"
+
+  crontab "${cron_file}" || error 'Failed to restore crontab.'
+}
+
+# Backs up the current crontab to CRON_BACKUP_FILE and removes all cron jobs.
+# On a first-install where no crontab exists yet, seeds the backup from
+# crontab.txt (if present) so that resume_cron can restore a known-good state.
+suspend_cron() {
+  debug 'Suspending cron jobs...'
+  local src_file="${PERSONAL_CONFIGS_DIR}/crontab.txt"
+  if crontab -l > "${CRON_BACKUP_FILE}" 2>/dev/null; then
+    debug "Backed up existing crontab to '$(yellow "${CRON_BACKUP_FILE}")'"
+  elif is_file "${src_file}"; then
+    # No active crontab (e.g. FIRST_INSTALL), but a known-good crontab.txt exists - use it as the backup
+    cp "${src_file}" "${CRON_BACKUP_FILE}"
+    debug "Seeded cron backup from '$(yellow "${src_file}")'"
+  else
+    : > "${CRON_BACKUP_FILE}"
+    debug 'No existing crontab or crontab.txt; created empty backup'
+  fi
+  crontab -r &>/dev/null || true
+  success 'Cron jobs suspended'
+}
+
+# Restores crontab from CRON_BACKUP_FILE and cleans up the backup file.
+# If the backup is empty (e.g. genuine first-install with no prior crontab.txt),
+# does nothing.
+resume_cron() {
+  debug 'Resuming cron jobs...'
+  if is_non_empty_file "${CRON_BACKUP_FILE}"; then
+    restore_cron "${CRON_BACKUP_FILE}"
+    success 'Cron jobs resumed from backup'
+  else
+    info 'No cron backup to restore; skipping'
+  fi
+  rm -f "${CRON_BACKUP_FILE}"
+}
+
+# --------------------------------------------------------------------------
+# 1h. Config reloading (used post-bootstrap to apply changes)
 # --------------------------------------------------------------------------
 
 if is_zsh; then

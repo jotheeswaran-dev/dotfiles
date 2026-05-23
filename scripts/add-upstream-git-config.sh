@@ -58,7 +58,7 @@ main() {
     usage
   fi
 
-  section_header "$(yellow 'Adding new upstream to'): '$(purple "${target_folder}")'"
+  debug "$(yellow 'Adding new upstream to'): '$(purple "${target_folder}")'"
 
   if ! is_git_repo "${target_folder}"; then
     warn "'$(yellow "${target_folder}")' is not a git repo; Skipping!!!"

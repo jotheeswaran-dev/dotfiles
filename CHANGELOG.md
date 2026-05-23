@@ -2,6 +2,20 @@ As documented in the README's [adopting](README.md#how-to-adoptcustomize-the-scr
 
 For those who follow this repo, here's the changelog for ease of adoption:
 
+### 3.0.22
+
+* *[.shellrc]* Added `is_non_empty_file` helper (alongside `is_file_empty`) that returns true when a file exists and is non-empty. Used in `resume_cron` and `.zlogin`'s `recompile_zsh_scripts` in place of raw `[[ -s ]]` tests.
+* *[.shellrc]* Added new section `1g. Cron management - bootstrap layer` containing utiity helper functions and env vars for cron handling. These primitives only depend on utilities already in `.shellrc` so they are available the moment `.shellrc` is sourced — including on a vanilla OS before the dotfiles repo is cloned. Renamed the former `1g` section to `1h`.
+* *[.aliases]* Renamed cron section to `3j. Cron management - dotfiles layer` and retained only the 2 cron-related functions which are safe to call only after the dotfiles repo is cloned.
+* *[.aliases, fresh-install-of-osx.sh, recreate-repo.sh]* Restructured all cron handling around `suspend_cron`/`resume_cron` primitives. `suspend_cron` backs up the active crontab to `CRON_BACKUP_FILE` (seeding from `crontab.txt` on first-install when no active crontab exists) then removes it. `resume_cron` restores from the backup and cleans up; it is a safe no-op when the backup is absent or empty. Scripts clear `CRON_BACKUP_FILE` after a successful `recron` call so the EXIT trap cannot perform a stale restore.
+* *[fresh-install-of-osx.sh]* `_cleanup_and_exit` (ERR trap) now calls `resume_cron` when `.shellrc` is loaded, with a minimal raw `crontab`/`[[ -s ]]` fallback for the narrow window before `.shellrc` is available. The early `crontab -r` that previously appeared after `setup_jio_dns` is consolidated into the initial suspend block at the top of `main()`.
+* *[recreate-repo.sh]* `_cleanup_recreate` (EXIT trap) now calls `resume_cron` unconditionally on every exit; on the success path `CRON_BACKUP_FILE` is removed before `recron` runs, making the call a no-op.
+
+#### Adopting these changes
+
+* Rebase from upstream, resolve conflicts.
+* Quit and restart the Terminal application.
+
 ### 3.0.21
 
 * *[all shell scripts]* Removed dependencies on globally defined variables or those leaking from other functions (eg `main`) from within the same script. Used local variables as much as possible. Removed underscore prefix from all local variables. Refactored all nested functions to top-level, preserving behavior via zsh's dynamic scoping. Ordered function definitions by invocation flow within each script.

@@ -442,11 +442,22 @@ if command_exists "$(extract_first_word "${EDITOR}")"; then
 fi
 
 # --------------------------------------------------------------------------
-# 3j. Cron management
+# 3j. Cron management - dotfiles layer
+#
+# Contains the higher-level helpers that regenerate crontab from the canonical
+# template stored in the dotfiles repo.  These functions reference DOTFILES_DIR,
+# HOMEBREW_PREFIX, and PERSONAL_CONFIGS_DIR, so they are only safe to call
+# after the dotfiles repo has been cloned and the full shell environment is set
+# up (i.e. from within an interactive shell or late in fresh-install-of-osx.sh).
+#
+# The lower-level primitives (CRON_BACKUP_FILE, restore_cron, suspend_cron,
+# resume_cron) live in .shellrc so they are available the moment .shellrc is
+# sourced, well before the dotfiles repo exists.  See section 1g in .shellrc.
 # --------------------------------------------------------------------------
 
+# internal function - not to be called from outside
 _create_crontab() {
-  section_header 'Creating crontab.txt'
+  debug 'Creating crontab.txt'
   local file="${1}"
 
   echo '# Reference: https://crontab.guru/' > "${file}"
@@ -462,34 +473,13 @@ _create_crontab() {
   echo "0   */2   *   *   *   chronic zsh -lsc \"${DOTFILES_DIR}/scripts/software-updates-cron.sh | tee -a ${HOME}/software-updates-cron.log\"" >> "${file}"
 }
 
-restore_cron() {
-  local cron_file="${1}"
-  if ! is_file "${cron_file}"; then
-    warn "No '$(yellow "${cron_file}")' found; returning without any processing"
-    return 0 # Success, nothing to do
-  fi
-
-  ensure_dir_exists "$(dirname "${cron_file}")"
-
-  crontab "${cron_file}" || error 'Failed to restore crontab.'
-}
-
-# resurrects the cron entries based on the '${PERSONAL_CONFIGS_DIR}/crontab.txt' file
+# Regenerates crontab from scratch using the canonical crontab.txt template.
 recron() {
-  section_header 'Setting up crontab'
-  info "$(yellow 'Old cron listing')"
-  crontab -l || true
-
-  crontab -r &>/dev/null || true
-
+  debug 'Setting up crontab'
   local cron_file="${PERSONAL_CONFIGS_DIR}/crontab.txt"
   _create_crontab "${cron_file}"
-
   restore_cron "${cron_file}"
-
-  info "$(yellow 'New cron listing')"
-  crontab -l
-  success 'Restored crontab from backup.'
+  success 'Crontab set up successfully'
 }
 
 # --------------------------------------------------------------------------

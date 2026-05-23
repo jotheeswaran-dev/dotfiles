@@ -15,9 +15,6 @@
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
-# Script-level global for the trap handler that restores crontab on failure; assigned in main()
-cron_backup_file=""
-
 # Error trap cleanup and exit
 _cleanup_and_exit() {
   local message='Installation failed. Check for error messages above.'
@@ -27,27 +24,19 @@ _cleanup_and_exit() {
     echo "ERROR: ${message}" >&2
   fi
 
-  if [[ -s "${cron_backup_file}" ]]; then
-    if type warn &>/dev/null; then
-      warn 'Attempting to restore cron jobs from backup...'
+  # Restore cron from the backup taken at the start of main(); CRON_BACKUP_FILE is set there.
+  if type resume_cron &>/dev/null; then
+    resume_cron
+  elif [[ -s "${CRON_BACKUP_FILE:-}" ]]; then
+    # Fallback: shellrc not yet loaded, restore directly
+    if crontab "${CRON_BACKUP_FILE}"; then
+      echo 'SUCCESS: Restored crontab from backup.'
     else
-      echo 'WARN: Attempting to restore cron jobs from backup...'
+      echo 'ERROR: Failed to restore crontab.' >&2
     fi
-    if crontab "${cron_backup_file}"; then
-      if type success &>/dev/null; then
-        success 'Restored crontab from backup.'
-      else
-        echo 'SUCCESS: Restored crontab from backup.'
-      fi
-    else
-      if type error &>/dev/null; then
-        error 'Failed to restore crontab.'
-      else
-        echo 'ERROR: Failed to restore crontab.' >&2
-      fi
-    fi
+    rm -f "${CRON_BACKUP_FILE}"
   fi
-  rm -f "${cron_backup_file}"
+
   exit 1
 }
 
@@ -336,11 +325,15 @@ clone_profiles_repo() {
 }
 
 main() {
-  cron_backup_file="$(mktemp)"
-  crontab -l >"${cron_backup_file}"  2>/dev/null  || true
+  # Suspend cron early (shellrc not yet available at this point).
+  # CRON_BACKUP_FILE, suspend_cron and resume_cron live in .shellrc (section 1g) so they are
+  # guaranteed present the moment .shellrc is sourced, even before the dotfiles repo is cloned.
+  export CRON_BACKUP_FILE="${TMPDIR:-/tmp}/crontab_backup"
+  crontab -l > "${CRON_BACKUP_FILE}" 2>/dev/null || : > "${CRON_BACKUP_FILE}"
+  crontab -r &>/dev/null || true
 
   trap _cleanup_and_exit ERR
-  trap 'rm -f "${cron_backup_file}"' EXIT
+  trap 'rm -f "${CRON_BACKUP_FILE}"' EXIT
 
   export ZDOTDIR="${ZDOTDIR:-"${HOME}"}"
   export ZSH="${ZSH:-"${ZDOTDIR}/.oh-my-zsh"}"
@@ -369,9 +362,6 @@ main() {
   # sudo spectl --master-disable
 
   setup_jio_dns
-
-  # if this is being run on a machine that's already configured, then remove the cron jobs (it's backed up, and will be restored on failure or regenerated on success)
-  crontab -r &>/dev/null  || true
 
   download_and_source_shellrc
 
@@ -467,8 +457,10 @@ main() {
   step_start
   section_header "$(yellow 'Setup cron jobs')"
   if command_exists recron; then
+    # Remove the backup before calling recron so that if any subsequent step fails the EXIT trap
+    # finds nothing to restore, preventing a stale backup file from persisting across runs.
+    rm -f "${CRON_BACKUP_FILE}"
     recron
-    success 'Successfully setup cron jobs'
   else
     warn "Skipping setting up of cron jobs since '$(yellow 'recron')' couldn't be found; Please set it up manually"
   fi

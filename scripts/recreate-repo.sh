@@ -26,18 +26,13 @@ extract_git_config_value() {
   git -C "${1}" config --get "${2}" || error "Failed to get git config value '${2}' for folder '${1}'"
 }
 
-# Script-level global for the trap handler that restores crontab on failure; assigned in main()
-cron_backup_file=""
+# Trap handler: on any exit, restore cron from backup if CRON_BACKUP_FILE is present.
+# On the success path, CRON_BACKUP_FILE is removed before recron runs, so resume_cron becomes a no-op here.
+# On the failure path, resume_cron restores from the backup saved by suspend_cron.
 _cleanup_recreate() {
   local exit_code=$?
-  if [[ ${exit_code} -ne 0 ]]; then
-    warn "Script exited with error code ${exit_code}."
-    if [[ -s "${cron_backup_file}" ]]; then
-      warn 'Attempting to restore cron jobs from backup...'
-      restore_cron "${cron_backup_file}" && success 'Restored crontab from backup.'
-    fi
-  fi
-  rm -f "${cron_backup_file}"
+  [[ ${exit_code} -ne 0 ]] && warn "Script exited with error code ${exit_code}."
+  resume_cron
 }
 
 main() {
@@ -77,14 +72,9 @@ main() {
   section_header "$(yellow 'Processing folder'): '$(cyan "${folder}")'"
   info "$(yellow 'Squash commits (will lose history!)'): '$(cyan "${force}")'"
 
-  # Backup crontab and set up a trap to restore it on exit.
-  cron_backup_file="$(mktemp)"
-  # Save current crontab; ignore errors if it's empty.
-  crontab -l >"${cron_backup_file}"  2>/dev/null  || true # Backup crontab, ignore failure if empty
+  # Suspend cron while this script is running; the trap restores it on failure, recron regenerates it on success.
+  suspend_cron
   trap _cleanup_recreate EXIT
-
-  # Remove crontab while this script is running. The trap will restore it on failure.
-  crontab -r &>/dev/null  || true
 
   # Capture information from pre-existing git repo
   local git_url
@@ -157,8 +147,10 @@ main() {
 
   success "The git repo in '$(yellow "${folder}")' recreated and pushed successfully to '$(yellow "${git_url}")'"
 
-  # Resurrect crontab after this script finishes
+  # Regenerate crontab after this script finishes.
+  # Clear the backup first so the EXIT trap (_cleanup_recreate -> resume_cron) becomes a no-op.
   load_zsh_configs
+  rm -f "${CRON_BACKUP_FILE}"
   recron
 }
 
