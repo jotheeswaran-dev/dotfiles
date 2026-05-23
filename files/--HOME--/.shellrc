@@ -76,6 +76,34 @@ export LESSCHARSET='utf-8'
 export ARCH="${ARCH:-"$(uname -m)"}"
 export ARCHFLAGS="-arch ${ARCH}"
 
+# Moving homebrew env vars here itself so that the initial homebrew installation
+# on a vanilla OS can be done/applied into memory immediately
+if [[ "${ARCH}" =~ 'arm' ]]; then
+  export HOMEBREW_PREFIX='/opt/homebrew'
+else
+  export HOMEBREW_PREFIX='/usr/local'
+fi
+export HOMEBREW_NO_ANALYTICS=1
+export HOMEBREW_CLEANUP_MAX_AGE_DAYS=3
+export HOMEBREW_CLEANUP_PERIODIC_FULL_DAYS=3
+export HOMEBREW_BAT=1
+export HOMEBREW_VERBOSE_USING_DOTS=1
+export HOMEBREW_BUNDLE_FILE="${HOME}/Brewfile"
+export HOMEBREW_NO_ENV_HINTS=1
+# TODO: Uncomment once this feature has stabilized
+# export HOMEBREW_VERIFY_ATTESTATIONS=1
+
+# ==============================================================================
+# GROUP 1: Bootstrap Utilities
+# Available immediately after .shellrc is sourced on a vanilla OS.
+# Used by fresh-install-of-osx.sh during first-time installation before the
+# dotfiles repo is cloned and before .aliases is loaded.
+# ==============================================================================
+
+# --------------------------------------------------------------------------
+# 1a. Shell state & basic predicates
+# --------------------------------------------------------------------------
+
 # Dummy function to check if shellrc is sourced
 is_shellrc_sourced() {
   return 0
@@ -85,11 +113,45 @@ is_running_in_tty() {
   [[ -t 0 ]]
 }
 
+is_zsh() {
+  [[ "${0}" =~ 'zsh' ]]
+}
+
 # replace the value of the 'HOME' variable with '~' to shorten the text length
 replace_home_with_tilde() {
   local escaped_home="$(echo "${HOME}" | sed "s/\//\\\\\//g")"
   echo "${1}" | sed "s/${escaped_home}/~/"
 }
+
+is_zero_string() {
+  [[ -z "${1}" ]]
+}
+
+is_non_zero_string() {
+  [[ -n "${1}" ]]
+}
+
+# Remove trailing slash if present
+strip_trailing_slash() {
+  echo "${1%\/}"
+}
+
+extract_last_segment() {
+  local without_trailing_slash="$(strip_trailing_slash "${1}")"
+  echo "${without_trailing_slash##*/}"
+  unset without_trailing_slash
+}
+
+extract_first_word() {
+  local input="${1}"
+  local delimiter="${2:- }"
+  local first_part="${input%%${delimiter}*}"
+  echo "${first_part}"
+}
+
+# --------------------------------------------------------------------------
+# 1b. Terminal colors
+# --------------------------------------------------------------------------
 
 colorize() {
   printf "\x1b[${1}m"
@@ -231,9 +293,10 @@ print_script_duration() {
   echo "$(purple '==>') $(yellow 'Script finished at:') $(light_blue "${end_time_human}") ($(yellow 'Total duration:') $(light_blue "${duration_human}") $(yellow 'seconds'))."
 }
 
-# ---------------------------------------------------------------------------
-# Step timing helpers
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# 1c. Step timing helpers (used by fresh-install-of-osx.sh for progress)
+# --------------------------------------------------------------------------
+
 # Holds the epoch-second timestamp of the most recent step_start call.
 _STEP_START_TIME=0
 # Holds the epoch-second timestamp of the overall script start; set by
@@ -275,24 +338,9 @@ step_end() {
   echo "$(purple '    ⏱') $(yellow 'step:') $(light_blue "${step_human}") $(yellow '| elapsed:') $(light_blue "${total_human}")"
 }
 
-is_zero_string() {
-  [[ -z "${1}" ]]
-}
-
-is_non_zero_string() {
-  [[ -n "${1}" ]]
-}
-
-# Remove trailing slash if present
-strip_trailing_slash() {
-  echo "${1%\/}"
-}
-
-extract_last_segment() {
-  local without_trailing_slash="$(strip_trailing_slash "${1}")"
-  echo "${without_trailing_slash##*/}"
-  unset without_trailing_slash
-}
+# --------------------------------------------------------------------------
+# 1d. Filesystem & OS predicates
+# --------------------------------------------------------------------------
 
 is_arm() {
   [[ "${ARCH}" =~ 'arm' ]]
@@ -348,25 +396,21 @@ command_exists() {
   (( $+commands[${1}] || $+functions[${1}] || $+aliases[${1}] || $+builtins[${1}] ))
 }
 
-is_zsh() {
-  [[ "${0}" =~ 'zsh' ]]
+is_macos() {
+  [[ "${OSTYPE}" =~ 'darwin' ]]
 }
 
-if is_zsh; then
-  # Function to reload Zsh configuration files.
-  # WARNING: Sourcing .zshenv/.zshrc/.zlogin from a file that might be sourced *by* them
-  # can lead to infinite loops or unexpected behavior if not called carefully.
-  # This is likely intended for manual use or specific bootstrap scenarios after config changes.
-  # Note: This function is kind of equivalent to 'omz reload', but that doesn't seem to work when installing on a vanilla OS
-  load_zsh_configs() {
-    local file_list=('.zshenv' '.zshrc' '.zlogin')
-    for file in "${file_list[@]}"; do
-      load_file_if_exists "${ZDOTDIR}/${file}"
-    done
-    unset file
-    unset file_list
-  }
-fi
+is_linux() {
+  [[ "${OSTYPE}" =~ 'Linux' ]]
+}
+
+is_windows() {
+  [[ "${OSTYPE}" =~ 'MINGW' ]]
+}
+
+# --------------------------------------------------------------------------
+# 1e. PATH & environment variable manipulation
+# --------------------------------------------------------------------------
 
 append_to_path_if_dir_exists() {
   is_directory "${1}" && path+="${1}"
@@ -396,25 +440,9 @@ prepend_to_pkg_config_path_if_dir_exists() {
   is_directory "${1}" && export PKG_CONFIG_PATH="${1}${PKG_CONFIG_PATH+:${PKG_CONFIG_PATH}}"
 }
 
-is_macos() {
-  [[ "${OSTYPE}" =~ 'darwin' ]]
-}
-
-is_linux() {
-  [[ "${OSTYPE}" =~ 'Linux' ]]
-}
-
-is_windows() {
-  [[ "${OSTYPE}" =~ 'MINGW' ]]
-}
-
-extract_first_word() {
-  local input="${1}"
-  local delimiter="${2:- }"
-  local first_part="${input%%${delimiter}*}"
-  # local remaining="${input#*${delimiter}}"
-  echo "${first_part}"
-}
+# --------------------------------------------------------------------------
+# 1f. Bootstrap operations (called directly by fresh-install-of-osx.sh)
+# --------------------------------------------------------------------------
 
 ###############################################################################################
 # Ask for the administrator password upfront and keep it alive until this script has finished #
@@ -427,11 +455,6 @@ keep_sudo_alive() {
 
 build_keybase_repo_url() {
   echo "keybase://private/${KEYBASE_USERNAME}/${1}"
-}
-
-folder_size() {
-  local folder="${1:-$(pwd)}"
-  echo "$(yellow "$(realpath "${folder}")") --> $(cyan "$(/usr/bin/du -sh "${folder}" | cut -f1)") bytes"
 }
 
 clone_repo_into() {
@@ -498,22 +521,6 @@ set_ssh_folder_permissions() {
   fi
 }
 
-# Moving homebrew env vars here itself so that the initial homebrew installation on a vanilla OS can be done/applied into memory immediately
-if is_arm; then
-  export HOMEBREW_PREFIX='/opt/homebrew'
-else
-  export HOMEBREW_PREFIX='/usr/local'
-fi
-export HOMEBREW_NO_ANALYTICS=1
-export HOMEBREW_CLEANUP_MAX_AGE_DAYS=3
-export HOMEBREW_CLEANUP_PERIODIC_FULL_DAYS=3
-export HOMEBREW_BAT=1
-export HOMEBREW_VERBOSE_USING_DOTS=1
-export HOMEBREW_BUNDLE_FILE="${HOME}/Brewfile"
-export HOMEBREW_NO_ENV_HINTS=1
-# TODO: Uncomment once this feature has stabilized
-# export HOMEBREW_VERIFY_ATTESTATIONS=1
-
 eval_shellenv() {
   local output
   if output="$("$@" 2>/dev/null)"; then
@@ -521,6 +528,26 @@ eval_shellenv() {
   fi
   unset output
 }
+
+# --------------------------------------------------------------------------
+# 1g. Config reloading (used post-bootstrap to apply changes)
+# --------------------------------------------------------------------------
+
+if is_zsh; then
+  # Function to reload Zsh configuration files.
+  # WARNING: Sourcing .zshenv/.zshrc/.zlogin from a file that might be sourced *by* them
+  # can lead to infinite loops or unexpected behavior if not called carefully.
+  # This is likely intended for manual use or specific bootstrap scenarios after config changes.
+  # Note: This function is kind of equivalent to 'omz reload', but that doesn't seem to work when installing on a vanilla OS
+  load_zsh_configs() {
+    local file_list=('.zshenv' '.zshrc' '.zlogin')
+    for file in "${file_list[@]}"; do
+      load_file_if_exists "${ZDOTDIR}/${file}"
+    done
+    unset file
+    unset file_list
+  }
+fi
 
 # if is_macos; then
   # Uninstall and reinstall xcode (useful immediately after upgrade or if reinstalling the OS)

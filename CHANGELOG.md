@@ -2,6 +2,17 @@ As documented in the README's [adopting](README.md#how-to-adoptcustomize-the-scr
 
 For those who follow this repo, here's the changelog for ease of adoption:
 
+### 3.0.20
+
+* *[.mise.toml]* Converted the repo-level `.tool-versions` to `.mise.toml` and use the default system ruby.
+* *[.shellrc, .aliases]* Reorganized and reordered all functions into logical groups (bootstrap utilities in `.shellrc`, ongoing daily-use functions in `.aliases`), each with descriptive comments.
+* *[.aliases]* Rewrote `install_mise_versions` to scan all git repos under `$HOME`, collect their ancestors, filter to directories with mise config files, and run `mise trust` + `mise install` on each.
+
+#### Adopting these changes
+
+* Rebase from upstream, resolve conflicts.
+* Quit and restart the Terminal application.
+
 ### 3.0.19
 
 * *[.gitconfig, Brewfile]* Replaced `diff-so-fancy` with `delta` as the diff/pager tool. The new `[delta]` section emulates diff-so-fancy's look and feel with bold yellow file headers, pink hunk headers inside a pink box, character-level word-diff highlighting, Monokai Extended syntax theme, and hyperlinks for opening files in Zed.

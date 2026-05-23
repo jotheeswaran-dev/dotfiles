@@ -15,7 +15,15 @@
 # DUPLICATE! Copied over since we get an error if the .shellrc was not loaded
 type is_shellrc_sourced &>/dev/null || source "${HOME}/.shellrc"
 
-# add flags to existing aliases
+# ==============================================================================
+# GROUP 3: Ongoing Daily-Use Aliases & Functions
+# Loaded after .shellrc via .zshrc. These are convenience wrappers, maintenance
+# tools, and project-specific helpers used during interactive shell sessions.
+# ==============================================================================
+
+# --------------------------------------------------------------------------
+# 3a. Shell defaults — extended flags on built-in commands
+# --------------------------------------------------------------------------
 alias less="${aliases[less]:-less} -RF"
 alias cp="${aliases[cp]:-cp} -p"
 alias mkdir="${aliases[mkdir]:-mkdir} -p"
@@ -23,6 +31,9 @@ alias grep="${aliases[grep]:-grep} -Hn --color=auto --exclude-dir={.zsh_sessions
 alias fgrep="${aliases[fgrep]:-fgrep} -Hn --color=auto --exclude-dir={.zsh_sessions,.IdentityService,.Trash} --exclude={\".*history\",\".zcompdump*\",\"*.zwc*\",\".*.zwc*\"}"
 alias egrep="${aliases[egrep]:-egrep} -Hn --color=auto --exclude-dir={.zsh_sessions,.IdentityService,.Trash} --exclude={\".*history\",\".zcompdump*\",\"*.zwc*\",\".*.zwc*\"}"
 
+# --------------------------------------------------------------------------
+# 3b. Tool replacements — enhanced CLI tools
+# --------------------------------------------------------------------------
 # eza already defines 'll' - so skip if that's present
 ! command_exists eza && alias ll='ls -la'
 command_exists tree && alias tree="${aliases[tree]:-tree} -Ch"
@@ -32,6 +43,9 @@ command_exists bat && alias cat='bat'
 command_exists btop && alias top='btop'
 command_exists ncdu && alias du='ncdu --color dark -r -x --exclude .git --exclude .svn --exclude node_modules --exclude .npm --exclude .nuget --exclude Library'
 
+# --------------------------------------------------------------------------
+# 3c. Multi-repo git shortcuts (via run-all.sh)
+# --------------------------------------------------------------------------
 if command_exists 'run-all.sh'; then
   # shortcuts to handle multiple git repos bypassing the omz auto-correct prompt for 'git'
   alias rug='run-all.sh git'
@@ -67,6 +81,10 @@ if command_exists 'run-all.sh'; then
   fi
 fi
 
+# --------------------------------------------------------------------------
+# 3d. Cache & cleanup
+# --------------------------------------------------------------------------
+
 delete_caches() {
   # delete the zsh compiled files so that they can be recompiled whenever a new terminal session is next started
   find "${HOME}" "${HOMEBREW_PREFIX}" \( -path '*/.git/*' -o -path '*/node_modules/*' -o -path '*/.mypy_cache/*' -o -path '*/__pycache__/*' \) -prune -o -maxdepth 6 -name '*.zwc*' -type f -print -delete || warn "find command failed in ${HOME} or ${HOMEBREW_PREFIX}"
@@ -74,6 +92,10 @@ delete_caches() {
   # delete the global cache directory
   is_directory "${XDG_CACHE_HOME}" && rm -rfv "${XDG_CACHE_HOME}"
 }
+
+# --------------------------------------------------------------------------
+# 3e. Repo management & environment setup
+# --------------------------------------------------------------------------
 
 resurrect_tracked_repos() {
   if is_non_zero_string "${PERSONAL_CONFIGS_DIR}"; then
@@ -104,22 +126,52 @@ resurrect_tracked_repos() {
 }
 
 install_mise_versions() {
+  section_header "$(yellow 'Installing mise all git repos and ancestors')"
   if ! command_exists mise; then
     warn "Couldn't find 'mise' in the PATH; Skipping loading any mise configs"
-    return 0 # Success, nothing to do
+    return 0
   fi
 
-  local config_files=('.java-version' '.ruby-version' '.python-version' '.node-version' '.nvmrc' '.tool-versions')
-  for f in "${config_files[@]}"; do
-    find "${HOME}" -name "${f}" -maxdepth 1 -exec echo "===> Installing for {}" \; -execdir mise install \;
-  done
-  unset config_files
+  local -A _seen_dirs
+  local -a _all_dirs
 
-  local repo_base_dirs=("${DOTFILES_DIR}" "${PROJECTS_BASE_DIR}")
-  for d in "${repo_base_dirs[@]}"; do
-    is_directory "${d}" && find "${d}" -name '.git' -type d -maxdepth 5 -exec echo "===> Installing for {}" \; -execdir mise install \;
+  # Find all git repos under HOME, collect them and every ancestor (including HOME itself)
+  while IFS= read -r git_dir; do
+    local dir="${git_dir:h}"  # strip the trailing /.git to get the repo root
+    while [[ "${dir}" != "/" ]]; do
+      if is_zero_string "${_seen_dirs[$dir]}"; then
+        _seen_dirs[$dir]=1
+        _all_dirs+=("${dir}")
+      fi
+      [[ "${dir}" == "${HOME}" ]] && break  # stop after processing HOME
+      dir="${dir:h}"  # walk up one level
+    done
+  done < <(find "${HOME}" -maxdepth 9 -type d -name '.git' 2>/dev/null)
+
+  # Sort by depth so parents come before children, then filter to dirs with mise configs
+  local mise_configs=('.mise.toml' '.tool-versions' '.ruby-version' '.python-version' '.node-version' '.java-version' '.nvmrc')
+  local -a sorted_dirs
+  for dir in "${(@on)_all_dirs}"; do
+    for cfg in "${mise_configs[@]}"; do
+      if is_file "${dir}/${cfg}"; then
+        sorted_dirs+=("${dir}")
+        break
+      fi
+    done
   done
-  unset repo_base_dirs
+  unset mise_configs
+  local total=${#sorted_dirs}
+  local idx=0
+
+  for dir in "${sorted_dirs[@]}"; do
+    ((idx++))
+    echo "$(yellow "[${idx}/${total}] processing '${dir}'")"
+    mise trust -C "${dir}" 2>/dev/null
+    mise install -C "${dir}"
+  done
+  unset sorted_dirs
+  unset _all_dirs
+  unset _seen_dirs
 }
 
 _direnv_process() {
@@ -148,30 +200,9 @@ allow_all_direnv_configs() {
   done
 }
 
-if is_macos; then
-  if command_exists brew; then
-    alias bcg='brew outdated --greedy'
-    alias bcug='brew upgrade --greedy'
-    alias bupc='brew bundle check || brew bundle --cleanup || true; brew bundle cleanup -f || true; brew cleanup --prune=all || true; brew autoremove || true; brew upgrade || true; post-brew-install.sh || true'
-  fi
-fi
-
-alias find_broken_links='find . -xtype l -print' # Find links whose targets do not exist
-alias clear_logs='rm -rfv */log/*.log'
-alias clear_coverage='rm -rfv */coverage */coverage.data'
-alias kill_ds='sudo find . -type f -name .DS_Store -print -delete'
-alias kill_loc='sudo find . -type f -name .localized -print -delete'
-
-# Remove trailing spaces
-_remove_trailing_find_cmd="find . -type f \( -name '*.*cs*' -o -name '*.*less' -o -name '*.*js*' -o -name '*.*rb' -o -name '*.*ml' -o -name '*.rake' -o -name '*.java' -o -name '*.ts*' \) -print0"
-if is_linux || is_windows; then
-  # Linux/WSL/Cygwin sed uses -i without an argument for backup suffix
-  alias remove_trailing="${_remove_trailing_find_cmd} | xargs -0 sed -i 's/[ ]*$//'"
-elif is_macos; then
-  # macOS sed requires an argument for -i ('' for no backup)
-  alias remove_trailing="${_remove_trailing_find_cmd} | xargs -0 sed -i '' 's/[ ]*$//'"
-fi
-unset _remove_trailing_find_cmd
+# --------------------------------------------------------------------------
+# 3f. macOS-specific utilities
+# --------------------------------------------------------------------------
 
 # generate mac addr to escape some free wifi mac addr restrictions
 _free_wifi() {
@@ -180,21 +211,19 @@ _free_wifi() {
   (openssl rand -hex 6 | sed 's/\(..\)/\1:/g; s/.$//' | xargs sudo ifconfig "${interface}" ether) && \
   (ifconfig "${interface}" | \grep ether)
 }
-if is_linux; then
-  alias free_wifi='_free_wifi eth0'
-elif is_macos; then
-  alias free_wifi='_free_wifi en0'
-  alias flush_dns='sudo killall -HUP mDNSResponder;sudo killall mDNSResponderHelper;sudo dscacheutil -flushcache;say MacOS DNS cache has been cleared'
-fi
 
 if is_macos; then
+  alias free_wifi='_free_wifi en0'
+
+  alias flush_dns='sudo killall -HUP mDNSResponder;sudo killall mDNSResponderHelper;sudo dscacheutil -flushcache;say MacOS DNS cache has been cleared'
+
   # MacOS: Remove apps from quarantine
   unquarantine() {
     xattr -rd com.apple.quarantine "${@}"
     open "${@}"
   }
 
-  # MacOS: Clean up LaunchServices to remove duplicates in the “Open With” menu
+  # MacOS: Clean up LaunchServices to remove duplicates in the "Open With" menu
   alias cleanup_launch_services='/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain system -domain user && killall Finder'
 
   # Show/hide hidden files in Finder
@@ -204,16 +233,54 @@ if is_macos; then
   # Hide/show all desktop icons (useful when presenting)
   alias hide_desktop='defaults write com.apple.finder CreateDesktop -bool false && killall Finder'
   alias show_desktop='defaults write com.apple.finder CreateDesktop -bool true && killall Finder'
+
+  # Finds and appends the preferences associated with the partial string passed in as an argument.
+  # Also, sorts (and removes duplicates) from the config file used to capture preferences
+  find_and_append_prefs() {
+    local file_name="${DOTFILES_DIR}/scripts/data/capture-prefs-domains.txt"
+    defaults find "${1}" | \grep 'keys in domain' | cut -d"'" -f2 >> "${file_name}"
+    sort -u -o "${file_name}" "${file_name}"
+    unset file_name
+  }
+elif is_linux; then
+  alias free_wifi='_free_wifi eth0'
 fi
+
+# --------------------------------------------------------------------------
+# 3g. Homebrew utilities
+# --------------------------------------------------------------------------
+
+if is_macos && command_exists brew; then
+  alias bcg='brew outdated --greedy'
+  alias bcug='brew upgrade --greedy'
+  alias bupc='brew bundle check || brew bundle --cleanup || true; brew bundle cleanup -f || true; brew cleanup --prune=all || true; brew autoremove || true; brew upgrade || true; post-brew-install.sh || true'
+
+  # brew cask contribution
+  check_cask() {
+    # shasum -a 256 <fileName>
+    # cd $(brew --repository homebrew/cask-versions) &&
+    brew audit --online --cask "${1}" && brew style --fix --cask "${1}"
+    # cd -
+    # brew fetch --cask "${1}"
+  }
+
+  # brew contribution
+  check_formula() {
+    brew install --build-from-source "${1}"
+    brew test "${1}"
+    brew audit --strict "${1}"
+  }
+fi
+
+# --------------------------------------------------------------------------
+# 3h. Diagnostic & utility functions
+# --------------------------------------------------------------------------
 
 # Added to view the shell startup time (modified from https://blog.jonlu.ca/posts/speeding-up-zsh)
 time_shell_startup() {
   local shell="${1-${SHELL}}"
   for i in $(seq 1 10); do /usr/bin/time "${shell}" -i -c exit; done
 }
-
-# npm
-command_exists npm && alias npm_cleanup='npm cache clear --force'
 
 if command_exists docker; then
   # docker (TODO: Not sure why this is not done automatically by rancher when it starts up)
@@ -245,12 +312,6 @@ EOF
   }
 fi
 
-# tmux
-if command_exists tmux; then
-  alias tmuxn='tmux new-session -A -s'  # start a new tmux session and name it
-  alias tmuxa='tmux attach -t'          # attach to a named tmux session
-fi
-
 # convert from pdf to png without losing quality
 pdf_to_png() {
   if [[ $# -ne 1 ]]; then
@@ -269,6 +330,43 @@ pdf_to_png() {
   magick -density 800 "${pdf}" -quality 100 "${png}"
 }
 
+# Show disk usage of a folder in a colorized format (moved from .shellrc)
+folder_size() {
+  local folder="${1:-$(pwd)}"
+  echo "$(yellow "$(realpath "${folder}")") --> $(cyan "$(/usr/bin/du -sh "${folder}" | cut -f1)")"
+}
+
+# --------------------------------------------------------------------------
+# 3i. Misc file & path aliases
+# --------------------------------------------------------------------------
+
+alias find_broken_links='find . -xtype l -print' # Find links whose targets do not exist
+alias clear_logs='rm -rfv */log/*.log'
+alias clear_coverage='rm -rfv */coverage */coverage.data'
+alias kill_ds='sudo find . -type f -name .DS_Store -print -delete'
+alias kill_loc='sudo find . -type f -name .localized -print -delete'
+
+# Remove trailing spaces
+_remove_trailing_find_cmd="find . -type f \( -name '*.*cs*' -o -name '*.*less' -o -name '*.*js*' -o -name '*.*rb' -o -name '*.*ml' -o -name '*.rake' -o -name '*.java' -o -name '*.ts*' \) -print0"
+if is_linux || is_windows; then
+  # Linux/WSL/Cygwin sed uses -i without an argument for backup suffix
+  alias remove_trailing="${_remove_trailing_find_cmd} | xargs -0 sed -i 's/[ ]*$//'"
+elif is_macos; then
+  # macOS sed requires an argument for -i ('' for no backup)
+  alias remove_trailing="${_remove_trailing_find_cmd} | xargs -0 sed -i '' 's/[ ]*$//'"
+fi
+unset _remove_trailing_find_cmd
+
+# npm
+command_exists npm && alias npm_cleanup='npm cache clear --force'
+
+# tmux
+if command_exists tmux; then
+  alias tmuxn='tmux new-session -A -s'  # start a new tmux session and name it
+  alias tmuxa='tmux attach -t'          # attach to a named tmux session
+fi
+
+# Editor aliases
 if command_exists "$(extract_first_word "${EDITOR}")"; then
   if is_zsh; then
     # associate file extensions with applications for the 'open' command
@@ -280,8 +378,12 @@ if command_exists "$(extract_first_word "${EDITOR}")"; then
   alias edit="$(extract_first_word "${EDITOR}")"
 
   # opens the relevant files and folders (used for laptop provisioning) in a single VSCode session
-  alias edit-gist='edit "${DOTFILES_DIR}" "${PERSONAL_BIN_DIR}" "${PERSONAL_CONFIGS_DIR}" "${HOME}"/.gitconfig-* "${HOME}/.gitignore" "${SSH_CONFIGS_DIR}" "${HOME}/.tool-versions" "${PERSONAL_PROFILES_DIR}/.gitignore"'
+  alias edit-gist='edit "${DOTFILES_DIR}" "${PERSONAL_BIN_DIR}" "${PERSONAL_CONFIGS_DIR}" "${HOME}"/.gitconfig-* "${HOME}/.gitignore" "${SSH_CONFIGS_DIR}" "${HOME}/.mise.toml" "${PERSONAL_PROFILES_DIR}/.gitignore"'
 fi
+
+# --------------------------------------------------------------------------
+# 3j. Cron management
+# --------------------------------------------------------------------------
 
 _create_crontab() {
   section_header 'Creating crontab.txt'
@@ -330,6 +432,10 @@ recron() {
   success 'Restored crontab from backup.'
 }
 
+# --------------------------------------------------------------------------
+# 3k. Keybase git gc
+# --------------------------------------------------------------------------
+
 # runs git gc on the keybase remote repos (not sure if this actually compresses the remote repo or not)
 if command_exists keybase; then
   kbgc() {
@@ -341,34 +447,9 @@ if command_exists keybase; then
   }
 fi
 
-if is_macos && command_exists brew; then
-  # brew cask contribution
-  check_cask() {
-    # shasum -a 256 <fileName>
-    # cd $(brew --repository homebrew/cask-versions) &&
-    brew audit --online --cask "${1}" && brew style --fix --cask "${1}"
-    # cd -
-    # brew fetch --cask "${1}"
-  }
-
-  # brew contribution
-  check_formula() {
-    brew install --build-from-source "${1}"
-    brew test "${1}"
-    brew audit --strict "${1}"
-  }
-fi
-
-if is_macos; then
-  # Finds and appends the preferences associated with the partial string passed in as an argument.
-  # Also, sorts (and removes duplicates) from the config file used to capture preferences
-  find_and_append_prefs() {
-    local file_name="${DOTFILES_DIR}/scripts/data/capture-prefs-domains.txt"
-    defaults find "${1}" | \grep 'keys in domain' | cut -d"'" -f2 >> "${file_name}"
-    sort -u -o "${file_name}" "${file_name}"
-    unset file_name
-  }
-fi
+# --------------------------------------------------------------------------
+# 3l. System maintenance
+# --------------------------------------------------------------------------
 
 # delete all personal data before re-imaging the laptop
 implode() {
@@ -385,6 +466,10 @@ implode() {
     sudo rm -rfv "${f}"*
   done
 }
+
+# --------------------------------------------------------------------------
+# 3m. Project-specific helpers
+# --------------------------------------------------------------------------
 
 # common build, debug and launch aliases for any folder - converted to functions for lazy evaluation
 # these will use the current folder name to find the shell script to run
