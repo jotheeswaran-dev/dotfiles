@@ -2,6 +2,20 @@ As documented in the README's [adopting](README.md#how-to-adoptcustomize-the-scr
 
 For those who follow this repo, here's the changelog for ease of adoption:
 
+### 3.0.19
+
+* *[.gitconfig, Brewfile]* Replaced `diff-so-fancy` with `delta` as the diff/pager tool. The new `[delta]` section emulates diff-so-fancy's look and feel with bold yellow file headers, pink hunk headers inside a pink box, character-level word-diff highlighting, Monokai Extended syntax theme, and hyperlinks for opening files in Zed.
+* *[Brewfile]* Replaced `jq` with `jaq` (a faster Rust reimplementation).
+* *[Brewfile]* Commented out `codeql` cask.
+
+#### Adopting these changes
+
+* Rebase from upstream, resolve conflicts, and then proceed with the following steps in all open terminals:
+
+  ```bash
+  bupc
+  ```
+
 ### 3.0.18
 
 * *[.gitconfig]* Enabled `init.defaultRefFormat = reftable` (removed the TODO/commented-out placeholder). All new and freshly-cloned repos will automatically use the reftable ref storage format; pre-existing repos are unaffected and do not need to be converted (though migration is possible — see below).

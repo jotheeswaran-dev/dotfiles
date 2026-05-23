@@ -2,7 +2,7 @@
 
 # Note:
 # [Windows users] If you are on windows, please search for the word 'windows' - and fix those lines - they seem to cause some trouble
-# [General] Since I use 'diff-so-fancy' as the diffing tool, it's absence on your system will cause some errors. If you are able to, I would sincerely urge you to install and use it for a much better experience. If not, please replace all such occurrences back to use 'diff'
+# [General] Since I use 'delta' as the diffing/pager tool, it's absence on your system will cause some errors. If you are able to, I would sincerely urge you to install and use it for a much better experience. If not, please replace all such occurrences back to use 'diff'
 
 # Note: Even though this will show up twice in `git config -l` - it will still be overridden based on the order of the includeIf lines below (last matching configuration wins). Utility subcommand to find out which config wins: `git who`
 [includeIf "gitdir/i:~/"]
@@ -145,8 +145,8 @@
   # Shows diff with changed words highlighted inline (red=deleted, green=added).
   # Usage: git dcolor [<path>]
   dcolor = diff --color-words
-  # dw = diff --word-diff=color           # Note: Commented out since we use diff-so-fancy; but keeping for reference
-  # dcw = diff --word-diff=color --staged # Note: Commented out since we use diff-so-fancy; but keeping for reference
+  # dw = diff --word-diff=color           # Note: Commented out since we use delta; but keeping for reference
+  # dcw = diff --word-diff=color --staged # Note: Commented out since we use delta; but keeping for reference
 
   # undo the last N commits (1 by default) - provided by git-extras
   # Usage: git undo [<N>]
@@ -184,7 +184,7 @@
   # Example: git grep "TODO"
   grep = grep -Ii
 
-  # Outputs a plain unified diff (bypassing diff-so-fancy) suitable for use as a patch file.
+  # Outputs a plain unified diff (bypassing delta) suitable for use as a patch file.
   # Usage: git patch [<path>] > my.patch
   patch = !git --no-pager diff --no-color
 
@@ -358,7 +358,7 @@
   fsMonitor = true
   logAllRefUpdates = true
   longPaths = true
-  pager = diff-so-fancy | less --tabs=2 -RFX
+  pager = delta
   # repositoryFormatVersion = 1   # Note: This can be uncommented to enable the new repository format for SHA256 support
   sshCommand="ssh -o ConnectTimeout=20"
   symlinks = false
@@ -373,11 +373,29 @@
   submodule = diff
 [diff "pandoc"]
   textconv = pandoc --sandbox --to=markdown
-[diff-so-fancy]
-  # changeHunkIndicators = false
-  # markEmptyLines = false
-  # stripLeadingSymbols = false
-  # useUnicodeRuler = false
+[delta]
+  # Designed to emulate diff-so-fancy's default look and feel
+  # ==========================================================
+  file-style = "bold yellow"
+  file-decoration-style = "yellow ul ol"
+  file-added-label = "🟢 added:"
+  file-modified-label = "🟠 modified:"
+  file-removed-label = "🔴 deleted:"
+  file-renamed-label = "🔵 renamed:"
+  file-change-type-label-width = 0
+  hunk-header-style = "file line-number syntax bold"
+  hunk-header-decoration-style = "box"
+  line-numbers = false
+  side-by-side = false
+  syntax-theme = "Monokai Extended"
+  minus-style = "red"
+  minus-emph-style = "bold #FF6B68 #3D1A1A"
+  plus-style = "green"
+  plus-emph-style = "bold #98FB98 #006400"
+  whitespace-error-style = "magenta reverse"
+  navigate = true
+  hyperlinks = true
+  hyperlinks-file-link-format = "zed://file/{path}:{line}"
 [extensions]
   # objectFormat = sha256         # Note: This can be uncommented to enable the new repository format for SHA256 support
   # compatObjectFormat = sha1     # Note: This can be uncommented to enable the new repository format for SHA256 support
@@ -426,7 +444,7 @@
   defaultBranch = master
   defaultRefFormat = reftable
 [interactive]
-  diffFilter = diff-so-fancy --patch
+  diffFilter = delta --color-only
 [maintenance]
   auto = true
   strategy = incremental
@@ -449,7 +467,7 @@
   writeReverseIndex = true
 [pager]
   # Note: The '--pattern' switch sets some pre-search terms, but also scrolls to fill the whole console for single line change - which I dont like.
-  diff = diff-so-fancy | less --tabs=2 -RFX  # --pattern '^(Date|added|deleted|modified|renamed): '    # windows
+  diff = delta  # --pattern '^(Date|added|deleted|modified|renamed): '    # windows
 [pull]
   autoStash = true
   rebase = true
