@@ -12,7 +12,8 @@
 # It assumes the following:
 #   1. Ruby language is present in the system prior to this script being run.
 
-require_relative 'utilities/string'
+require_relative 'utilities/logging'
+include Logging
 require 'fileutils'
 require 'find'
 require 'pathname' # NOTE: This has been added explicitly due to the default version of ruby (2.6) on a vanilla macos. Once the default ruby upgrades to 3.x, we can remove
@@ -66,15 +67,15 @@ STATS = Stats.new(processed: 0, created: 0, updated: 0, skipped: 0, errors: 0)
 #
 # @param path_template [String] The path template containing --VAR-- placeholders.
 # @param source_file [String] The source file path, used for logging purposes.
-# @return [String, nil] The interpolated path, or nil if an environment variable is missing.
+# @return [String, nil] The interpolated path, or +nil+ if any referenced environment variable is missing.
 def interpolate_path(path_template, source_file)
   # First, check if all referenced environment variables exist.
   # This avoids partial processing if a variable is missing later.
   # It also ensures that we check for key presence, not just a truthy value.
   missing_vars = path_template.scan(ENV_VAR_REGEX).flatten.uniq.reject { |var_name| ENV.key?(var_name) }
   if missing_vars.any?
-    puts "**WARN** Skipping processing involving '#{source_file}' because env var '#{missing_vars.join(', ')}' was not defined".yellow
-    return nil # Exit early if any variable is not defined
+    warn("Skipping processing involving '#{source_file}' because env var '#{missing_vars.join(', ')}' was not defined")
+    return
   end
 
   # If all variables are present, then perform the substitution.
@@ -86,9 +87,9 @@ end
 #
 # @param source_pn [Pathname] The Pathname object for the source file.
 # @param target_pn [Pathname] The Pathname object for the target file.
-# @param dry_run [Boolean] Show what would be done without doing it.
-# @param verbose [Boolean] Verbose output.
-# @param force [Boolean] Force overwrite without backing up existing files.
+# @param dry_run [true, false] Show what would be done without doing it.
+# @param verbose [true, false] Verbose output.
+# @param force [true, false] Force overwrite without backing up existing files.
 # @return [void]
 def process_dotfile(source_pn, target_pn, dry_run: false, verbose: false, force: false)
   source_path = source_pn.to_s.replace_home_path_with_tilde
@@ -96,48 +97,48 @@ def process_dotfile(source_pn, target_pn, dry_run: false, verbose: false, force:
 
   STATS.processed += 1
 
-  puts "Processing #{source_path.yellow} --> #{target_path.yellow}" if dry_run || verbose
+  info("Processing #{source_path} --> #{target_path}") if dry_run || verbose
 
   # Ensure target directory exists
   FileUtils.mkdir_p(target_pn.dirname) unless dry_run
 
-  if File.exist?(target_pn) && FileUtils.identical?(target_pn, source_pn) # Avoid moving if they are already the same file (e.g., if the user re-runs the script without changes)
+  if target_pn.exist? && FileUtils.identical?(target_pn, source_pn) # Avoid moving if they are already the same file (e.g., if the user re-runs the script without changes)
     # puts "  Target #{target_path.cyan} and source #{source_path.cyan} are identical.".blue if verbose
     STATS.skipped += 1
     return
   end
 
   # Check target status before deciding action
-  if File.symlink?(target_path) # NOTE: This has been added explicitly due to the default version of ruby (2.6) on a vanilla macos. Once the default ruby upgrades to 3.x, we can change to 'target_pn.symlink?'
-    puts "  Target #{target_path.cyan} exists as a symlink, will overwrite.".blue if verbose
+  if target_pn.symlink?
+    info("  Target #{target_path} exists as a symlink, will overwrite.") if verbose
     STATS.updated += 1
   elsif target_pn.exist? # It exists and is not a symlink (real file/dir)
     if force
-      puts "  Forcefully overwriting existing file #{target_path.cyan}".blue if verbose
+      info("  Forcefully overwriting existing file #{target_path}") if verbose
       FileUtils.rm_rf(target_pn) unless dry_run
     else
-      puts "  Moving existing file #{target_path.cyan} to #{source_path.cyan} (it will become the new version in your dotfiles repo)".blue if verbose
+      info("  Moving existing file #{target_path} to #{source_path} (it will become the new version in your dotfiles repo)") if verbose
       # Move the existing file from target to the source location in the dotfiles repo
       FileUtils.mv(target_pn, source_pn, force: true) unless dry_run
     end
     STATS.updated += 1
   else
     # Target does not exist, no backup needed
-    puts "  Target #{target_path.cyan} does not exist, creating new link/copy.".blue if verbose
+    info("  Target #{target_path} does not exist, creating new link/copy.") if verbose
     STATS.created += 1
   end
 
   # Create symlink or copy file for files matching 'custom.git'
   if source_pn.basename.to_s.match?(CUSTOM_GIT_FILENAME_PATTERN) # Special handling for git files, match on filename
-    puts "  Copying #{source_path.cyan} to #{target_path.cyan}".blue if verbose
+    info("  Copying #{source_path} to #{target_path}") if verbose
     FileUtils.cp(source_pn, target_pn) unless dry_run
   else
-    puts "  Creating symlink from #{source_path.cyan} to #{target_path.cyan}".blue
+    info("  Creating symlink from #{source_path} to #{target_path}")
     FileUtils.ln_sf(source_pn, target_pn) unless dry_run
   end
 rescue StandardError => e
-  puts "**ERROR** Failed during processing of #{source_path.cyan} -> #{target_path.cyan}: #{e.message}".red
-  puts e.backtrace.join("\n").red
+  warn("Failed during processing of #{source_path} -> #{target_path}: #{e.message}")
+  warn(Array(e.backtrace).join("\n"))
   STATS.errors += 1
 end
 
@@ -151,8 +152,8 @@ def ensure_ssh_include_line
   ssh_folder = Pathname.new(ENV.fetch('SSH_CONFIGS_DIR')).expand_path
   global_config_link = ssh_folder.join('global_config')
 
-  unless global_config_link.exist? && File.symlink?(global_config_link.to_s) # NOTE: This has been added explicitly due to the default version of ruby (2.6) on a vanilla macos. Once the default ruby upgrades to 3.x, we can change to 'global_config_link.symlink?'
-    puts "**WARN** Skipping SSH config update because '#{global_config_link.to_s.replace_home_path_with_tilde}' does not exist or is not a symlink.".yellow
+  unless global_config_link.exist? && global_config_link.symlink?
+    warn("Skipping SSH config update because '#{global_config_link.to_s.replace_home_path_with_tilde}' does not exist or is not a symlink.")
     return
   end
 
@@ -163,18 +164,18 @@ def ensure_ssh_include_line
   begin
     # Use File.foreach to stream the file line-by-line instead of loading it all into memory.
     if File.foreach(default_ssh_config).any? { |l| l.strip == include_line }
-      puts "'#{include_line}' already present in '#{default_ssh_config.to_s.replace_home_path_with_tilde}'".green
+      success("'#{include_line}' already present in '#{default_ssh_config.to_s.replace_home_path_with_tilde}'")
     else
-      puts "Adding '#{include_line}' to '#{default_ssh_config.to_s.replace_home_path_with_tilde}'".blue
+      info("Adding '#{include_line}' to '#{default_ssh_config.to_s.replace_home_path_with_tilde}'")
       File.write(default_ssh_config, "\n#{include_line}\n", mode: 'a')
     end
   rescue StandardError => e
-    puts "**ERROR** Failed processing SSH config '#{default_ssh_config.to_s.replace_home_path_with_tilde}': #{e.message}".red
+    warn("Failed processing SSH config '#{default_ssh_config.to_s.replace_home_path_with_tilde}': #{e.message}")
   end
 end
 
-puts 'Starting to install dotfiles'.green
-puts '[DRY-RUN MODE]'.yellow if options[:dry_run]
+info('Starting to install dotfiles')
+warn('[DRY-RUN MODE]') if options[:dry_run]
 
 # NOTE: cannot use Dir.glob since that doesn't handle hidden files
 Find.find(DOTFILES_ROOT_PATH) do |source_path_str|
@@ -200,17 +201,14 @@ Find.find(DOTFILES_ROOT_PATH) do |source_path_str|
 end
 
 # Print statistics summary
-puts "\n#{'Summary:'.green}"
+puts ''
+success('Summary:')
 puts "  Processed: #{STATS.processed}"
 puts "  Created:   #{STATS.created}"
 puts "  Updated:   #{STATS.updated}"
 puts "  Skipped:   #{STATS.skipped}"
-if STATS.errors > 0
-  puts "  Errors:    #{STATS.errors}".red
-else
-  puts "  Errors:    #{STATS.errors}"
-end
+puts "  Errors:    #{STATS.errors.positive? ? STATS.errors.to_s.red : STATS.errors}"
 
 ensure_ssh_include_line
 
-puts "Since the '.gitignore' and '.gitattributes' files are COPIED over, any new changes being pulled in (from a newer version of the upstream repo) need to be manually reconciled between this repo and your home and profiles folders".red
+warn("Since the '.gitignore' and '.gitattributes' files are COPIED over, any new changes being pulled in (from a newer version of the upstream repo) need to be manually reconciled between this repo and your home and profiles folders")

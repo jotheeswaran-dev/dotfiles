@@ -114,7 +114,7 @@ main() {
     step_end
   fi
 
-  echo '==> Finished independent updates.'
+  success 'Finished independent updates.'
 
   step_start
   section_header "$(yellow 'Update repos in home folder')"
@@ -155,7 +155,7 @@ main() {
       else
         file_epoch=$(date -d "${file_date}" +%s 2>/dev/null)     # GNU
       fi
-      if [[ -n "${file_epoch}" && "${file_epoch}" -lt "${cutoff_epoch}" ]]; then
+      if is_non_zero_string "${file_epoch}" && [[ "${file_epoch}" -lt "${cutoff_epoch}" ]]; then
         old_backups+=("${tracked_file}")
       fi
     done < <(git -C "${PERSONAL_PROFILES_DIR}" ls-files -- '*/zen-sessions-backup/zen-sessions-*.jsonlz4')
@@ -193,7 +193,7 @@ main() {
   if [[ ${#chrome_folders[@]} -gt 0 ]]; then
     for folder in "${chrome_folders[@]}"; do
       if is_git_repo "${folder}"; then
-        section_header "$(yellow 'Updating chrome folder:') $(purple "${folder}")"
+        section_header2 "$(yellow 'Updating chrome folder:') $(purple "${folder}")"
         git -C "${folder}" pull -r && success "Successfully updated: '$(yellow "${folder}")'" || warn "Failed to update: '$(yellow "${folder}")'"
       else
         debug "skipping update for non-repo: '$(yellow "${folder}")'"
@@ -214,7 +214,7 @@ main() {
   fi
   step_end
 
-  section_header "$(yellow 'Finished software updates at') $(purple "$(date)")"
+  success "Finished software updates at $(purple "$(date)")"
   print_script_duration "${script_start_time}"
 }
 

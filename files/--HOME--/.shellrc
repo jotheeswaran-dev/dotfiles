@@ -270,13 +270,30 @@ print_chars_for_length() {
   printf "${char}%.0s" {1..${final_length}}
 }
 
-section_header() {
+# Internal helper shared by section_header and section_header2.
+# Usage: _section_header_impl <header> <char> <glyph> <color_fn> <indent>
+_section_header_impl() {
   local header="$(replace_home_with_tilde "${1}")"
+  local char="${2}"
+  local glyph="${3}"
+  local color_fn="${4}"
+  local indent="${5:-}"
+  local indent_len=${#indent}
   local viewport_length=$(tput cols)
   local header_length=${#header}
-  local final_length=$(($(($((${viewport_length} - ${header_length})) / 2)) - 10))
+  local final_length=$(( (viewport_length - header_length - indent_len) / 2 - 10 ))
 
-  echo "$(light_blue $(print_chars_for_length '=' ${final_length})) ⏳ ${header} $(light_blue $(print_chars_for_length '=' ${final_length}))"
+  echo "${indent}$(${color_fn} $(print_chars_for_length "${char}" ${final_length})) ${glyph} ${header} $(${color_fn} $(print_chars_for_length "${char}" ${final_length}))"
+}
+
+section_header() {
+  _section_header_impl "${1}" '=' '⏳' 'light_blue'
+}
+
+# Sub-level section header: used for steps nested inside a top-level section_header.
+# Uses '-' padding, a '▶' glyph, cyan colour, and 2-space indent to visually subordinate it.
+section_header2() {
+  _section_header_impl "${1}" '-' '🔷' 'cyan' '  '
 }
 
 print_script_start() {
@@ -482,10 +499,12 @@ keep_sudo_alive() {
   if [ -n "$KEEP_SUDO_ALIVE_PID" ] && kill -0 "$KEEP_SUDO_ALIVE_PID" 2>/dev/null; then
     return
   fi
-  section_header "$(yellow 'Keeping sudo alive till this script has finished')"
+  step_start
+  section_header2 "$(yellow 'Keeping sudo alive till this script has finished')"
   sudo -v
   while true; do sudo -n true; sleep 60; kill -0 "$$" || exit; done 2>/dev/null &
   export KEEP_SUDO_ALIVE_PID=$!
+  step_end
 }
 
 build_keybase_repo_url() {
@@ -510,7 +529,7 @@ clone_repo_into() {
     # the move bypasses git's normal post-clone finalisation; shell prompts read .git/HEAD directly)
     local real_ref
     real_ref="$(git -C "${target_folder}" symbolic-ref HEAD 2>/dev/null)"
-    [[ -n "${real_ref}" ]] && echo "ref: ${real_ref}" > "${target_folder}/.git/HEAD"
+    is_non_zero_string "${real_ref}" && echo "ref: ${real_ref}" > "${target_folder}/.git/HEAD"
     unset real_ref
 
     success "Successfully cloned '$(yellow "${1}")$(green "' into '")$(yellow "${target_folder}")$(green "'")"

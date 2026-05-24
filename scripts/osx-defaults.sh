@@ -168,7 +168,7 @@ main() {
   ###############################################################################
 
   if ask 'Set computer name (as done via System Preferences → Sharing)' 'Y'; then
-    local username_in_camel_case=$(echo "$(whoami)" | awk '{$1=toupper(substr($1,0,1))substr($1,2)}1')
+    local username_in_camel_case="$(echo "$(whoami)" | awk '{$1=toupper(substr($1,0,1))substr($1,2)}1')"
     local human_date="$(date '+%Y-%m-%d-%H-%M')"
 
     sudo scutil --set ComputerName "IND-CHN-${username_in_camel_case}'s MBP-${human_date}"
@@ -1716,7 +1716,7 @@ main() {
   # Turn off spotlight indexing for all volumes (to pre-empt any issues with the system settings pane)
   sudo mdutil -Eda &>/dev/null  && sudo mdutil -ai off &>/dev/null
 
-  echo "Need to manually quit and restart 'Terminal' and 'iTerm' - since one of these might be running this script."
+  warn "Need to manually quit and restart 'Terminal' and 'iTerm' - since one of these might be running this script."
   success 'Done. Note that some of these changes require a logout/restart to take effect.'
 }
 

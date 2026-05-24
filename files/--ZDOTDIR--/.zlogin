@@ -20,7 +20,7 @@ type is_shellrc_sourced &>/dev/null || source "${HOME}/.shellrc"
 
 recompile_zsh_scripts() {
   if is_non_empty_file "${1}" && (! is_file "${1}.zwc" || [[ "${1}" -nt "${1}.zwc" ]]); then
-    [[ -n "${DEBUG+1}" ]] && echo "recompiling '$(replace_home_with_tilde "${1}")'"
+    is_non_zero_string "${DEBUG+1}" && echo "recompiling '$(replace_home_with_tilde "${1}")'"
     zrecompile -pq "${1}" &>/dev/null
   fi
 }
@@ -64,4 +64,4 @@ find_in_folder_and_recompile "${PROJECTS_BASE_DIR}"
 find_in_folder_and_recompile /opt/homebrew
 find_in_folder_and_recompile /usr/local
 
-[[ -n "${DEBUG+1}" ]] && echo "Finished recompiling zsh scripts."
+is_non_zero_string "${DEBUG+1}" && echo "Finished recompiling zsh scripts."

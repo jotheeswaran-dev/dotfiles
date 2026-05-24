@@ -19,7 +19,7 @@ st() {
     fi
   done
   folder="${folder:-$(pwd)}"
-  section_header "$(yellow 'Checking') $(purple "${folder}")"
+  section_header2 "$(yellow 'Checking') $(purple "${folder}")"
   if ! is_git_repo "${folder}"; then
     warn "Skipping finding status of the repo since '$(yellow "${folder}")' doesn't exist or is not a git repo"
   else

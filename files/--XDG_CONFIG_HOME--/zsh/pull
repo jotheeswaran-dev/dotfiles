@@ -19,7 +19,7 @@ _pull() {
     fi
   done
   folder="${folder:-$(pwd)}"
-  section_header "$(yellow 'Pulling') $(purple "${folder}")"
+  section_header2 "$(yellow 'Pulling') $(purple "${folder}")"
   if ! is_git_repo "${folder}"; then
     warn "Skipping pulling of the repo since '$(yellow "${folder}")' doesn't exist or is not a git repo"
   else

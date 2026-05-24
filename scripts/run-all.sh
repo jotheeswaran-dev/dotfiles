@@ -83,9 +83,9 @@ main() {
 
   # Report summary
   echo ""
-  section_header "$(yellow 'Summary')"
-  echo "Total repositories: ${total_count}"
-  echo "Successful: $(green ${#successful_repos[@]})"
+  info "$(yellow 'Summary')"
+  echo "  Total repositories: ${total_count}"
+  echo "  Successful: $(green ${#successful_repos[@]})"
   if [[ ${#failed_repos[@]} -gt 0 ]]; then
     echo "Failed: $(red ${#failed_repos[@]})"
     echo "$(red 'Failed repositories:')"

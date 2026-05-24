@@ -6,49 +6,73 @@ require 'pathname'  # Note: This has been added explicitly due to the default ve
 HOME_PATH_STR = Pathname.new(ENV.fetch('HOME')).expand_path.to_s.freeze
 
 class String
-  # colorization
+  # Wraps the string in the ANSI escape sequence for +code+.
+  # Returns the string unchanged when stdout is not a TTY (pipes, CI, etc.),
+  # mirroring the shell's conditional color variable assignment.
   #
-  # @param color_code [Integer] The color code to apply.
-  # @return [String] The colorized string.
-  def colorize(color_code)
-    "\x1b[#{color_code}m#{self}\x1b[0m"
+  # @api private
+  # @param code [String] SGR parameter sequence, e.g. "0;31" (normal red) or "1;34" (bright blue).
+  # @return [String]
+  def colorize(code)
+    return self unless $stdout.isatty
+
+    "\x1b[#{code}m#{self}\x1b[0m"
   end
   private :colorize
 
-  # replace the value of the 'HOME' variable with '~' to shorten the text length
+  # Replaces the expanded HOME path with '~' to produce a shorter, human-readable path.
+  # Returns the string unchanged if it does not contain the home directory path.
+  #
+  # @return [String]
   def replace_home_path_with_tilde
     gsub(HOME_PATH_STR, '~')
   end
 
+  # @return [String] The string in black.
+  def black;        colorize('0;30'); end
+
+  # @return [String] The string in dark gray.
+  def dark_gray;    colorize('1;30'); end
+
   # @return [String] The string in red.
-  def red
-    colorize(31)
-  end
+  def red;          colorize('0;31'); end
+
+  # @return [String] The string in light red.
+  def light_red;    colorize('1;31'); end
 
   # @return [String] The string in green.
-  def green
-    colorize(32)
-  end
+  def green;        colorize('0;32'); end
+
+  # @return [String] The string in light green.
+  def light_green;  colorize('1;32'); end
+
+  # @return [String] The string in orange.
+  def orange;       colorize('0;33'); end
 
   # @return [String] The string in yellow.
-  def yellow
-    colorize(33)
-  end
+  def yellow;       colorize('1;33'); end
 
   # @return [String] The string in blue.
-  def blue
-    colorize(34)
-  end
-
-  # @return [String] The string in pink.
-  def pink
-    colorize(35)
-  end
+  def blue;         colorize('0;34'); end
 
   # @return [String] The string in light blue.
-  def light_blue
-    colorize(36)
-  end
+  def light_blue;   colorize('1;34'); end
 
-  alias cyan light_blue
+  # @return [String] The string in purple.
+  def purple;       colorize('0;35'); end
+
+  # @return [String] The string in light purple.
+  def light_purple; colorize('1;35'); end
+
+  # @return [String] The string in cyan.
+  def cyan;         colorize('0;36'); end
+
+  # @return [String] The string in light cyan.
+  def light_cyan;   colorize('1;36'); end
+
+  # @return [String] The string in light gray.
+  def light_gray;   colorize('0;37'); end
+
+  # @return [String] The string in white.
+  def white;        colorize('1;37'); end
 end

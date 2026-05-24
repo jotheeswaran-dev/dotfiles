@@ -67,10 +67,10 @@ main() {
     exit 0
   fi
 
-  echo "Running operation: $(green "${operation}")"
+  info "Running operation: $(green "${operation}")"
   local app_pref
   for app_pref in "${app_array[@]}"; do
-    echo "Processing $(cyan "${app_pref}")"
+    debug "Processing $(cyan "${app_pref}")"
     local target_file="${target_dir}/${app_pref}.defaults"
     # Allow the loop to continue even if a specific defaults command fails
     /usr/bin/defaults "${operation}" "${app_pref}" "${target_file}" || warn "Failed to ${operation} '${app_pref}'"
@@ -81,9 +81,9 @@ main() {
   if [[ "${operation}" == 'export' ]]; then
     # Explicitly specify the git repo in the home folder, so that this script can be run from any folder
     git -C "${HOME}" add "${target_dir}" || warn "Failed to git add '${target_dir}'"
-    echo "$(green 'Export complete.') Staged changes in '${target_dir}'."
+    success "Export complete. Staged changes in '$(cyan "${target_dir}")'."
   fi
-  echo "$(green 'Operation finished.') Processed ${#app_array[@]} domains."
+  success "Operation finished. Processed $(cyan "${#app_array[@]}") domains."
 }
 
 main "$@"

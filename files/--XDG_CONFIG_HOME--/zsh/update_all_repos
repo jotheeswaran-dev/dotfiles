@@ -18,7 +18,7 @@ _update_repo() {
   local relative_path="$(git -C "${folder}" relative-path "${2}")"
   relative_path="${relative_path:-.}"
 
-  section_header "$(yellow 'Updating') $(purple "${folder}")"
+  section_header2 "$(yellow 'Updating') $(purple "${folder}")"
   rm -rfv "${folder}/.git/index.lock" "${folder}/.git/hooks"
 
   git -C "${folder}" add "${relative_path}" && git -C "${folder}" sci "Incremental commit: $(date)"

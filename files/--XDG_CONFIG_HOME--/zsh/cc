@@ -19,7 +19,7 @@ _cc() {
     fi
   done
   folder="${folder:-$(pwd)}"
-  section_header "$(yellow 'Compressing') $(purple "${folder}")"
+  section_header2 "$(yellow 'Compressing') $(purple "${folder}")"
   if ! is_git_repo "${folder}"; then
     warn "Skipping finding size of the repo since '$(yellow "${folder}")' doesn't exist or is not a git repo"
   else

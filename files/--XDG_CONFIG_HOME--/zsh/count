@@ -19,7 +19,7 @@ count() {
     fi
   done
   folder="${folder:-$(pwd)}"
-  section_header "$(yellow 'Counting commits') $(purple "${folder}")"
+  section_header2 "$(yellow 'Counting commits') $(purple "${folder}")"
   if ! is_git_repo "${folder}"; then
     warn "Skipping finding count of the repo since '$(yellow "${folder}")' doesn't exist or is not a git repo"
   else

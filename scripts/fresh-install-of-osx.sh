@@ -160,7 +160,7 @@ install_oh_my_zsh_and_custom_plugins() {
   # Note: Some of these are available via brew, but enabling them will take an additional step and the only other benefit (of keeping them up-to-date using brew can still be achieved by updating the git repos directly using git commands)
   # These repos can be alternatively tracked using git submodules, but by doing so, any new change in the submodule, will show up as a new commit in the main (home) repo. To avoid this "noise", I prefer to decouple them
   step_start
-  section_header "$(yellow 'Installing custom omz plugins')"
+  section_header2 "$(yellow 'Installing custom omz plugins')"
   # Note: These are not installed using homebrew since sourcing of the files needs to be explicit in .zshrc
   # Also, the order of these being referenced in the zsh session startup (for vanilla OS) will cause a warning to be printed though the rest of the shell startup sequence is still being performed. Ultimately, until they become included by default into omz, keep them here as custom plugins
   local -a omz_plugins=(
@@ -240,7 +240,7 @@ install_homebrew() {
   eval_shellenv "${HOMEBREW_PREFIX}/bin/brew" shellenv
 
   # Note: Temporarily disable the ERR trap since brew commands may fail on a vanilla OS (e.g. rate limits, missing deps).
-  if [[ -n "${FIRST_INSTALL}" ]]; then
+  if is_non_zero_string "${FIRST_INSTALL}"; then
     trap - ERR
   fi
 
@@ -255,7 +255,7 @@ install_homebrew() {
   # Note: Split into taps, formulae and casks separately so that curl doesnt timeout, and failures are isolated and reported clearly.
   # Note: Each pass includes the Brewfile preamble (non tap/brew/cask lines) to preserve Ruby DSL context (e.g. cask_args, is_arm).
   # Note: For FIRST_INSTALL, only process lines up to the first 'FIRST_INSTALL' guard in the Brewfile (which marks the end of the base install section).
-  if [[ -n "${FIRST_INSTALL}" ]]; then
+  if is_non_zero_string "${FIRST_INSTALL}"; then
     local brewfile_content brewfile_preamble
     brewfile_content="$(sed "/^[^#].*FIRST_INSTALL/q" "${HOMEBREW_BUNDLE_FILE}" | \grep -Ev "^[^#].*FIRST_INSTALL")"
     brewfile_preamble="$(print "${brewfile_content}" | \grep -Ev "^tap |^brew |^cask ")"
@@ -279,9 +279,9 @@ install_homebrew() {
   load_zsh_configs
   # Note: run the post-brew-install script once more (in case it wasn't run by the brew lifecycle due to any error)
   # Note: When running with FIRST_INSTALL, some errors might come on a vanilla OS - warn and continue instead of failing.
-  post-brew-install.sh || { [[ -n "${FIRST_INSTALL}" ]] && warn 'post-brew-install encountered errors; continuing...'; }
+  post-brew-install.sh || { is_non_zero_string "${FIRST_INSTALL}" && warn 'post-brew-install encountered errors; continuing...'; }
 
-  if [[ -n "${FIRST_INSTALL}" ]]; then
+  if is_non_zero_string "${FIRST_INSTALL}"; then
     trap _cleanup_and_exit ERR
   fi
 
@@ -506,10 +506,9 @@ main() {
   # dotnet tool install -g dotnet-sonarscanner
   # dotnet tool install -g dotnet-format
 
-  echo "\n"
   success '** Finished auto installation process: Remember to do the following steps! **'
-  echo "$(yellow "1. Run the 'bupc' alias to finish setting up all other applications managed by homebrew")"
-  echo "$(yellow "2. MANUALLY QUIT AND RESTART iTerm2 and Terminal apps")"
+  warn "1. Run the 'bupc' alias to finish setting up all other applications managed by homebrew"
+  warn "2. MANUALLY QUIT AND RESTART iTerm2 and Terminal apps"
 
   print_script_duration "${script_start_time}"
 }

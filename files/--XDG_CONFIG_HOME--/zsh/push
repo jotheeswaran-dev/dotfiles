@@ -19,7 +19,7 @@ _push() {
     fi
   done
   folder="${folder:-$(pwd)}"
-  section_header "$(yellow 'Pushing') $(purple "${folder}")"
+  section_header2 "$(yellow 'Pushing') $(purple "${folder}")"
   if ! is_git_repo "${folder}"; then
     warn "Skipping pushing of the repo since '$(yellow "${folder}")' doesn't exist or is not a git repo"
   else

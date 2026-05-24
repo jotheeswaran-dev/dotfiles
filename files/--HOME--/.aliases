@@ -103,7 +103,7 @@ resurrect_tracked_repos() {
     # ssh-keyscan -H -t ED25519 github.com >> "${SSH_CONFIGS_DIR}/known_hosts"
 
     # resurrect repositories that are in the repo catalogues
-    section_header "$(yellow 'Resurrecting all tracked git repos')"
+    section_header2 "$(yellow 'Resurrecting all tracked git repos')"
     # Use zsh glob qualifier (N.) for nullglob and regular files
     for file in "${PERSONAL_CONFIGS_DIR}"/repositories-*.yml(N.); do
       resurrect-repositories.rb -r "${file}"
@@ -115,7 +115,7 @@ resurrect_tracked_repos() {
   fi
 
   # post-clone operations for installing system dependencies
-  section_header "$(yellow 'Running post-clone operations')"
+  section_header2 "$(yellow 'Running post-clone operations')"
   if command_exists all; then
     all restore-mtime -c
     all maintenance register --config-file "${HOME}/.gitconfig-oss.inc"
@@ -126,7 +126,7 @@ resurrect_tracked_repos() {
 }
 
 install_mise_versions() {
-  section_header "$(yellow 'Installing mise in all git repos and ancestors')"
+  section_header2 "$(yellow 'Installing mise in all git repos and ancestors')"
   if ! command_exists mise; then
     warn "Couldn't find 'mise' in the PATH; Skipping loading any mise configs"
     return 0
@@ -135,7 +135,7 @@ install_mise_versions() {
   local -A seen_dirs
   local -a all_dirs
   local find_maxdepth=6
-  [[ -n "${FIRST_INSTALL}" ]] && find_maxdepth=3
+  is_non_zero_string "${FIRST_INSTALL}" && find_maxdepth=3
 
   # Find all git repos under HOME, collect them and every ancestor (including HOME itself)
   while IFS= read -r git_dir; do
@@ -175,14 +175,14 @@ install_mise_versions() {
   done
 
   if ${all_installed}; then
-    echo "$(green 'All mise tools are already installed')"
+    success 'All mise tools are already installed'
     unset sorted_dirs all_dirs seen_dirs
     return
   fi
 
   for dir in "${sorted_dirs[@]}"; do
     ((idx++))
-    echo "$(yellow "[${idx}/${total}] processing '${dir}'")"
+    info "[${idx}/${total}] processing '$(cyan "${dir}")'"
     mise -C "${dir}" trust -y -a
     if ! mise install --dry-run-code -C "${dir}" 2>/dev/null; then
       mise -C "${dir}" install
@@ -194,7 +194,7 @@ install_mise_versions() {
 }
 
 allow_all_direnv_configs() {
-  section_header "$(yellow 'Allowing direnv configs in all git repos and ancestors')"
+  section_header2 "$(yellow 'Allowing direnv configs in all git repos and ancestors')"
   if ! command_exists direnv; then
     warn "Couldn't find 'direnv' in the PATH; Skipping allowing any direnv configs"
     return 0
@@ -203,7 +203,7 @@ allow_all_direnv_configs() {
   local -A seen_dirs
   local -a all_dirs
   local find_maxdepth=6
-  [[ -n "${FIRST_INSTALL}" ]] && find_maxdepth=3
+  is_non_zero_string "${FIRST_INSTALL}" && find_maxdepth=3
 
   # Find all git repos under HOME, collect them and every ancestor (including HOME itself)
   while IFS= read -r git_dir; do
@@ -241,14 +241,14 @@ allow_all_direnv_configs() {
   done
 
   if ${all_allowed}; then
-    echo "$(green 'All direnv configs are already allowed')"
+    success 'All direnv configs are already allowed'
     unset sorted_dirs all_dirs seen_dirs
     return
   fi
 
   for dir in "${sorted_dirs[@]}"; do
     ((idx++))
-    echo "$(yellow "[${idx}/${total}] allowing direnv for '${dir}'")"
+    info "[${idx}/${total}] allowing direnv for '$(cyan "${dir}")'"
     if direnv allow "${dir}"; then
       success "Successfully allowed direnv for '$(yellow "${dir}")'"
     else

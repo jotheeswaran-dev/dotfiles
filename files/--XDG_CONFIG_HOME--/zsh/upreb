@@ -11,10 +11,10 @@ type is_shellrc_sourced &>/dev/null || source "${HOME}/.shellrc"
 # This function is used to run the `git upreb` command for all the locally checked-out branches of the specified folder. If no folder is specified, the function defaults to using the current directory.
 _upreb() {
   local folder="${1:-$(pwd)}"
-  section_header "$(yellow 'Upreb-ing') $(purple "${folder}")"
+  section_header2 "$(yellow 'Upreb-ing') $(purple "${folder}")"
 
   local current_branch="$(git -C "${folder}" br)"
-  echo "current branch: $(yellow "${current_branch}")"
+  info "current branch: $(yellow "${current_branch}")"
   local local_branches=("${(@f)$(git -C "${folder}" branch --format='%(refname:short)')}")
   if [[ ${#local_branches[@]} -gt 0 ]]; then
     # remove the current_branch from the list of branches
@@ -23,7 +23,7 @@ _upreb() {
     local_branches+=("${current_branch}")
 
     for branch in "${local_branches[@]}"; do
-      echo "processing: $(yellow "${branch}")"
+      debug "processing: $(yellow "${branch}")"
       git -C "${folder}" switch "${branch}"
       git -C "${folder}" upreb
       git -C "${folder}" push

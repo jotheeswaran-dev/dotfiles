@@ -2,6 +2,19 @@ As documented in the README's [adopting](README.md#how-to-adoptcustomize-the-scr
 
 For those who follow this repo, here's the changelog for ease of adoption:
 
+### 3.0.23
+
+* *[utilities/string.rb]* Replicate coloring (with composite ANSI codes) and logging utilities and use them in the ruby scripts to match the shell scripts.
+* *[install-dotfiles.rb]* Replaced all inline `puts "...".color` calls with the appropriate semantic logging method (`info`, `warn`, `success`).
+* *[resurrect-repositories.rb]* Replaced all inline `puts "...".color` calls with the appropriate semantic logging method (`info`, `warn`, `success`, `debug`). Added more verbose logging.
+* *[all shell scripts]* Used utillity functions from `.shellrc`. Replaced bare `echo` calls with appropriate utility logging functions.
+* *[all ruby scripts]* Used idiomatic ruby and ensure they are compatible with ruby 2.6 (ruby version in vanilla macos Tahoe).
+
+#### Adopting these changes
+
+* Rebase from upstream, resolve conflicts.
+* Quit and restart the Terminal application.
+
 ### 3.0.22
 
 * *[.shellrc]* Added `is_non_empty_file` helper (alongside `is_file_empty`) that returns true when a file exists and is non-empty. Used in `resume_cron` and `.zlogin`'s `recompile_zsh_scripts` in place of raw `[[ -s ]]` tests.
