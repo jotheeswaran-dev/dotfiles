@@ -91,5 +91,8 @@ else
   warn 'Skipping symlinking zed for command-line invocation'
 fi
 
+section_header "$(yellow 'Updating antidote plugins and regenerating antidote plugin bundle')"
+update_antidote_and_regenerate_plugin_bundle
+
 # Setup the login items once the full list of applications has been installed on the machine
 # "${DOTFILES_DIR}/scripts/setup-login-item.sh" -a 'ZoomHider'

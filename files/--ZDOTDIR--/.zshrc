@@ -24,99 +24,36 @@
 # Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
 (( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
 
-# Initialize starship prompt.
-# Note: Must be initialized AFTER oh-my-zsh is loaded (see further below), so the actual
-# eval is deferred. We use a precmd hook approach via the oh-my-zsh sourcing below.
-# The eval line is placed after 'source oh-my-zsh.sh' further down in this file.
+# ──────────────────────────────────────────────────────────────────────────────
+# Antidote — static plugin bundle
+#
+# antidote is a zsh plugin manager distributed as a zsh script (not a binary).
+# It is sourced from the brew-installed path to make the 'antidote' function
+# available for 'antidote update' and 'antidote bundle' commands.
+# ──────────────────────────────────────────────────────────────────────────────
 
-# Path to your Oh My Zsh installation.
-export ZDOTDIR="${ZDOTDIR:-"${HOME}"}"
-export ZSH="${ZSH:-"${ZDOTDIR}/.oh-my-zsh"}"
-export ZSH_CUSTOM="${ZSH_CUSTOM:-"${ZSH}/custom"}"
+# Source antidote itself so the 'antidote' function is available (for update/bundle).
+# Guarded so a vanilla OS (before brew installs antidote) still works fine.
+#
+# Unset $ZSH and $ZSH_CUSTOM before sourcing so that the OMZ lib files loaded
+# via antidote can self-initialise them to their actual locations in the antidote
+# cache.
+# Without this, stale values left over from a prior OMZ install (e.g.
+# $ZSH=~/.oh-my-zsh, $ZSH_CUSTOM=~/.oh-my-zsh/custom) would be kept and OMZ
+# internals would silently break.
+unset ZSH ZSH_CUSTOM
+load_file_if_exists "${ANTIDOTE_ZSH}"
 
-# Set name of the theme to load --- if set to "random", it will
-# load a random theme each time Oh My Zsh is loaded, in which case,
-# to know which specific one was loaded, run: echo $RANDOM_THEME
-# See https://github.com/ohmyzsh/ohmyzsh/wiki/Themes
-# ZSH_THEME is intentionally unset — starship handles the prompt.
-# ZSH_THEME="robbyrussell"
-
-# Set list of themes to pick from when loading at random
-# Setting this variable when ZSH_THEME=random will cause zsh to load
-# a theme from this variable instead of looking in ${ZSH}/themes/
-# If set to an empty array, this variable will have no effect.
-# ZSH_THEME_RANDOM_CANDIDATES=( 'robbyrussell' 'agnoster' )
-
-# Uncomment the following line to use case-sensitive completion.
-# CASE_SENSITIVE="true"
-
-# Uncomment the following line to use hyphen-insensitive completion.
-# Case-sensitive completion must be off. _ and - will be interchangeable.
-# HYPHEN_INSENSITIVE="true"
-
-# Uncomment one of the following lines to change the auto-update behavior
-# zstyle ':omz:update' mode disabled  # disable automatic updates
-zstyle ':omz:update' mode auto      # update automatically without asking
-# zstyle ':omz:update' mode reminder  # just remind me to update when it's time
-
-# Uncomment the following line to change how often to auto-update (in days).
-# Note: Increased from 1 to 7 to avoid a daily git-based update check which adds ~10ms to startup
-zstyle ':omz:update' frequency 7
-
-# Skip compaudit (which checks for insecure completion directories) since it adds ~11ms to startup.
-# The check is unnecessary on a personal machine where you control all fpath directories.
-# ZSH_DISABLE_COMPFIX makes OMZ use 'compinit -u' instead of 'compinit -i', which still calls
-# compaudit internally. However, using -C (cache) flag entirely skips the scan when dump is fresh.
-ZSH_DISABLE_COMPFIX=true
-
-# Set plugin options that are needed before each plugin is loaded
+# Plugin option variables must be set before the bundle is sourced.
+# zsh-autosuggestions strategy
+export ZSH_AUTOSUGGEST_STRATEGY=(history completion)
+# eza plugin: enable icons
 zstyle ':omz:plugins:eza' 'icons' yes
-# zstyle ':omz:plugins:eza' 'git-status' no
-# zstyle ':omz:plugins:eza' 'header' no
-zstyle :omz:plugins:iterm2 shell-integration yes
-
-# Uncomment the following line if pasting URLs and other text is messed up.
-# DISABLE_MAGIC_FUNCTIONS="true"
-
-# Uncomment the following line to disable colors in ls.
-# DISABLE_LS_COLORS="true"
-
-# Uncomment the following line to disable auto-setting terminal title.
-# DISABLE_AUTO_TITLE="true"
-
-# Uncomment the following line to enable command auto-correction.
+# iterm2 plugin: enable shell integration
+zstyle ':omz:plugins:iterm2' shell-integration yes
+# correction: activated by lib/correction.zsh when ENABLE_CORRECTION is set
 export ENABLE_CORRECTION='true'
 
-# Uncomment the following line to display red dots whilst waiting for completion.
-# You can also set it to another string to have that shown instead of the default red dots.
-# e.g. COMPLETION_WAITING_DOTS="%F{yellow}waiting...%f"
-# Caution: this setting can cause issues with multiline prompts in zsh < 5.7.1 (see #5765)
-# COMPLETION_WAITING_DOTS="true"
-
-# Uncomment the following line if you want to disable marking untracked files
-# under VCS as dirty. This makes repository status check for large repositories
-# much, much faster.
-DISABLE_UNTRACKED_FILES_DIRTY='true'
-
-# Uncomment the following line if you want to change the command execution time
-# stamp shown in the history command output.
-# You can set one of the optional three formats:
-# "mm/dd/yyyy"|"dd.mm.yyyy"|"yyyy-mm-dd"
-# or set a custom format using the strftime function format specifications,
-# see 'man strftime' for details.
-# HIST_STAMPS="yyyy-mm-dd"
-
-# https://github.com/zsh-users/zsh-autosuggestions?tab=readme-ov-file#suggestion-strategy
-export ZSH_AUTOSUGGEST_STRATEGY=(history completion)
-
-# Which plugins would you like to load?
-# Standard plugins can be found in ${ZSH}/plugins/
-# Custom plugins may be added to ${ZSH_CUSTOM}/plugins/
-# Example format: plugins=(rails git textmate ruby lighthouse)
-# Add wisely, as too many plugins slow down shell startup.
-plugins=(direnv eza fast-syntax-highlighting git iterm2 mise sudo zbell zsh-autosuggestions)
-
-# Note: Using 'brew' as an oh-my-zsh plugin causes the PATH to be incorrect. For eg, 'bash' gets resolved to '/bin/bash' (which comes default with the OS) rather than the one from homebrew.
 # Cache brew shellenv to avoid running the brew binary on every shell startup (it's slow due to Ruby startup).
 # The cache is invalidated when the brew binary itself changes (i.e. after brew upgrades).
 # The cache pre-evaluates path_helper so sourcing it is a pure-zsh operation (no subprocesses).
@@ -149,9 +86,6 @@ plugins=(direnv eza fast-syntax-highlighting git iterm2 mise sudo zbell zsh-auto
   load_file_if_exists "${cache_file}"
 }
 
-# according to https://github.com/zsh-users/zsh-completions/issues/603#issue-373185486, this can't be added as a plugin to omz for the fpath to work correctly
-append_to_fpath_if_dir_exists "${ZSH_CUSTOM}/plugins/zsh-completions/src"
-
 load_file_if_exists "${HOMEBREW_PREFIX}/opt/git-extras/share/git-extras/git-extras-completion.zsh"
 
 # compinit: use -C (skip compaudit scan) when the dump file already exists,
@@ -167,7 +101,29 @@ export ZSH_COMPDUMP="${XDG_CACHE_HOME}/zcompdump"
   fi
 }
 
-load_file_if_exists "${ZSH}/oh-my-zsh.sh"
+# Source the pre-generated antidote static bundle.
+# On a vanilla OS (before brew installs antidote) this file is present because
+# it is checked into the home repo. No antidote binary is needed during the
+# shell startup.
+load_file_if_exists "${ANTIDOTE_PLUGIN_ZSH}"
+
+# Activate mise — the OMZ mise plugin referenced $ZSH_CACHE_DIR (undefined without OMZ)
+# so it has been removed from .zsh_plugins.txt and replaced with a direct activation here.
+#
+# Performance optimisation — cache `mise activate zsh` output to avoid forking the mise
+# binary on every shell start (~5-10ms saving). Same pattern as the starship init cache
+# below. The cache is keyed on the mise binary mtime and regenerated only when mise itself
+# is updated (e.g. after `brew upgrade`).
+if command_exists mise; then
+  () {
+    local mise_bin="${commands[mise]}"
+    local cache="${XDG_CACHE_HOME}/mise-activate-cache.zsh"
+    if ! is_file "${cache}" || [[ "${mise_bin}" -nt "${cache}" ]]; then
+      mise activate zsh >| "${cache}" 2>/dev/null
+    fi
+    load_file_if_exists "${cache}"
+  }
+fi
 
 # Initialize starship prompt (must be after plugins so it wins the PROMPT setup).
 #

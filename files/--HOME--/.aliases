@@ -207,7 +207,7 @@ install_mise_versions() {
       [[ "${dir}" == "${HOME}" ]] && break  # stop after processing HOME
       dir="${dir:h}"  # walk up one level
     done
-  done < <(find "${HOME}" "${DOTFILES_DIR}" "${PROJECTS_BASE_DIR}" -maxdepth ${find_maxdepth} \( -name 'node_modules' -o -name '.cache' -o -name '.oh-my-zsh' -o -name '.Trash' -o -name 'Library' -o -name 'Caches' \) -prune -o -type d -name '.git' -print 2>/dev/null)
+  done < <(find "${HOME}" "${DOTFILES_DIR}" "${PROJECTS_BASE_DIR}" -maxdepth ${find_maxdepth} \( -name 'node_modules' -o -name '.cache' -o -name '.Trash' -o -name 'Library' -o -name 'Caches' \) -prune -o -type d -name '.git' -print 2>/dev/null)
 
   # Sort by depth so parents come before children, then filter to dirs with mise configs
   local mise_configs=('.mise.toml' '.tool-versions' '.ruby-version' '.python-version' '.node-version' '.java-version' '.nvmrc')

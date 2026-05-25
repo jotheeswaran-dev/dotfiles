@@ -139,45 +139,9 @@ install_xcode_command_line_tools() {
 ensure_directories_exist() {
   step_start
   section_header "$(yellow 'Creating directories defined by various env vars')"
-  local -a folders=("${DOTFILES_DIR}" "${PROJECTS_BASE_DIR}" "${PERSONAL_BIN_DIR}" "${PERSONAL_CONFIGS_DIR}" "${PERSONAL_PROFILES_DIR}" "${XDG_CACHE_HOME}" "${XDG_CONFIG_HOME}" "${XDG_DATA_HOME}" "${XDG_STATE_HOME}")
+  local -a folders=("${ANTIDOTE_HOME}" "${DOTFILES_DIR}" "${PROJECTS_BASE_DIR}" "${PERSONAL_BIN_DIR}" "${PERSONAL_CONFIGS_DIR}" "${PERSONAL_PROFILES_DIR}" "${XDG_CACHE_HOME}" "${XDG_CONFIG_HOME}" "${XDG_DATA_HOME}" "${XDG_STATE_HOME}")
   for folder in "${folders[@]}"; do
     ensure_dir_exists "${folder}"
-  done
-  step_end
-}
-
-# Clone an OMZ plugin from GitHub if not already present
-clone_omz_plugin_if_not_present() {
-  local last_segment
-  last_segment="$(extract_last_segment "${1}")"
-  clone_repo_into "${1}" "${ZSH_CUSTOM}/plugins/${last_segment}" || warn "Failed to install '$(yellow "${last_segment}")'"
-}
-
-# Install Oh My Zsh and custom plugins
-install_oh_my_zsh_and_custom_plugins() {
-  step_start
-  section_header "$(yellow 'Installing oh-my-zsh') into '$(purple "${ZSH}")'"
-  if ! is_directory "${ZSH}"; then
-    sh -c "$(ZSH= curl --retry 3 --retry-delay 5 -fsSL https://install.ohmyz.sh/)" "" --unattended
-    success "Successfully installed oh-my-zsh into '$(yellow "${ZSH}")'"
-  else
-    warn "Skipping installation of oh-my-zsh since '$(yellow "${ZSH}")' is already present"
-  fi
-  step_end
-
-  # Note: Some of these are available via brew, but enabling them will take an additional step and the only other benefit (of keeping them up-to-date using brew can still be achieved by updating the git repos directly using git commands)
-  # These repos can be alternatively tracked using git submodules, but by doing so, any new change in the submodule, will show up as a new commit in the main (home) repo. To avoid this "noise", I prefer to decouple them
-  step_start
-  section_header2 "$(yellow 'Installing custom omz plugins')"
-  # Note: These are not installed using homebrew since sourcing of the files needs to be explicit in .zshrc
-  # Also, the order of these being referenced in the zsh session startup (for vanilla OS) will cause a warning to be printed though the rest of the shell startup sequence is still being performed. Ultimately, until they become included by default into omz, keep them here as custom plugins
-  local -a omz_plugins=(
-    'zdharma-continuum/fast-syntax-highlighting'
-    'zsh-users/zsh-autosuggestions'
-    'zsh-users/zsh-completions'
-  )
-  for plugin_url in "${omz_plugins[@]}"; do
-    clone_omz_plugin_if_not_present "https://github.com/${plugin_url}"
   done
   step_end
 }
@@ -186,7 +150,6 @@ install_oh_my_zsh_and_custom_plugins() {
 clone_dot_files_repo() {
   step_start
   section_header "$(yellow 'Installing dotfiles') into '$(purple "${DOTFILES_DIR}")'"
-  rm -rfv "${ZDOTDIR}/.zshrc.pre-oh-my-zsh"
   if is_non_zero_string "${DOTFILES_DIR}" && ! is_git_repo "${DOTFILES_DIR}"; then
     # Delete the auto-generated .zshrc since that needs to be replaced by the one in the DOTFILES_DIR repo
     rm -rf "${ZDOTDIR}/.zshrc"
@@ -341,8 +304,6 @@ main() {
   trap 'rm -f "${CRON_BACKUP_FILE}"' EXIT
 
   export ZDOTDIR="${ZDOTDIR:-"${HOME}"}"
-  export ZSH="${ZSH:-"${ZDOTDIR}/.oh-my-zsh"}"
-  export ZSH_CUSTOM="${ZSH_CUSTOM:-"${ZSH}/custom"}"
 
   # Note: Cannot load from shellrc since that file won't be present in a new machine (vanilla OS)
   # $EPOCHSECONDS is provided by the zsh/datetime built-in module — always available, no fork.
@@ -392,8 +353,6 @@ main() {
 
   ensure_directories_exist
 
-  install_oh_my_zsh_and_custom_plugins
-
   clone_dot_files_repo
 
   # run this outside of the clone function, since it needs to be run irrespective of whether the dotfiles repo was pre-existing or not
@@ -404,6 +363,9 @@ main() {
   DEBUG=true load_zsh_configs
 
   install_homebrew
+
+  section_header2 "$(yellow 'Installing antidote plugins and generating antidote plugin bundle')"
+  update_antidote_and_regenerate_plugin_bundle
 
   if is_non_zero_string "${KEYBASE_USERNAME}"; then
     if ! command_exists keybase; then
