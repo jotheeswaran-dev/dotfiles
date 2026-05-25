@@ -2,6 +2,33 @@ As documented in the README's [adopting](README.md#how-to-adoptcustomize-the-scr
 
 For those who follow this repo, here's the changelog for ease of adoption:
 
+
+#### Adopting these changes
+
+
+### 3.0.24
+
+* *[.shellrc]* Eliminated subprocess forks on every shell start: `$(whoami)` → `${USER}` (PAM builtin); `$(uname -m)` → `${${MACHTYPE%%-*}/#arm/arm64}` (zsh builtin, correctly maps `arm` → `arm64` on Apple Silicon); 16× `$(colorize ...)` calls for color variable initialisation → `$'\e[...'` ANSI escape literals; `$(tput cols)` in `print_chars_for_length` and `_section_header_impl` → `${COLUMNS}` (zsh special variable, no external process).
+* *[.shellrc]* `replace_home_with_tilde` rewritten as pure-zsh parameter expansion `${1//${HOME}/~}`, eliminating two subprocess forks (`echo` + `sed`) on every call.
+* *[.zshrc]* Starship prompt initialisation cached to `${XDG_CACHE_HOME}/starship-init-cache.zsh`, keyed on the starship binary mtime — avoids forking `starship init zsh` on every shell start. `$(command -v starship)` replaced with `${commands[starship]}` (O(1) zsh hash lookup, no fork).
+* *[.zshrc]* `compinit` overridden to use `-C` (skip `compaudit` scan) when the dump file already exists, saving ~11ms per startup. `ZSH_DISABLE_COMPFIX=true` set to suppress OMZ's own insecure-directory check.
+* *[.zshrc]* `brew shellenv` output cached to `${XDG_CACHE_HOME}/brew-shellenv-cache.zsh`, keyed on the brew binary mtime — eliminates the Ruby startup cost of running `brew` on every shell start.
+* *[.zshrc]* `$(extract_first_word "${editor}")` in the preferred-editor detection loop replaced with `${editor%% *}` (inline parameter expansion, no subshell).
+* *[.zshrc]* `autoload -Uz colors && colors` removed — none of the active plugins use `$fg`/`$bg`/`$color` from the zsh `colors` function; own color variables are defined as `$'\e[...'` literals in `.shellrc`.
+* *[.aliases]* Dynamic per-project `run-all.sh` aliases extracted into `_generate_repo_aliases` and cached to `${XDG_CACHE_HOME}/repo-aliases.zsh`. Cache is regenerated only when `PROJECTS_BASE_DIR` is newer than the cache or the cache is missing. Public `regenerate_repo_aliases` function added for manual refresh.
+* *[.aliases]* `$(extract_first_word "${EDITOR}")` at two startup-path callsites (editor existence check and `edit` alias definition) replaced with `${EDITOR%% *}` (no subshell).
+* *[.aliases]* `$(pwd)` default in `folder_size` replaced with `${PWD}` (zsh builtin).
+* *[.zlogin]* `find_in_folder_and_recompile` now uses a per-directory mtime sentinel file in `${XDG_CACHE_HOME}` — subsequent login shells skip the `find` scan entirely if the directory has not changed since the last recompilation, eliminating redundant work on every login.
+* *[.zlogin]* The five large directory recompilation scans (`DOTFILES_DIR`, `PERSONAL_BIN_DIR`, `PROJECTS_BASE_DIR`, `/opt/homebrew`, `/usr/local`) are now run in a disowned background job (`&!`) so they do not block the first prompt on login shells. Sentinel guards ensure they are no-ops when nothing has changed.
+* *[.zlogin]* Added `recompile_zsh_autoload_dir` to compile extensionless autoload function files under `${XDG_CONFIG_HOME}/zsh/` (e.g. `cc`, `count`, `pull`, `push`, `st`, etc.) which `find_in_folder_and_recompile` would silently skip due to its `*.sh`/`*.zsh` pattern filter. Cache files under `${XDG_CACHE_HOME}` are also compiled via `find_in_folder_and_recompile`.
+* *[all zsh scripts + autoload functions]* `type is_shellrc_sourced &>/dev/null` guard replaced with `(( $+functions[is_shellrc_sourced] ))` — pure zsh builtin check, no subshell.
+
+#### Adopting these changes
+
+* Rebase from upstream, resolve conflicts.
+* Run `delete_caches` to clear any stale `.zwc` bytecode and cached shell environment files.
+* Quit and restart the Terminal application.
+
 ### 3.0.23
 
 * *[utilities/string.rb]* Replicate coloring (with composite ANSI codes) and logging utilities and use them in the ruby scripts to match the shell scripts.
@@ -463,7 +490,7 @@ For those who follow this repo, here's the changelog for ease of adoption:
 
 ### 2.0.32
 
-* Minor fixes for using `ZSH` env variable instead of hardcoding `$HOME/.oh-my-zsh` in multiple places.
+* Minor fixes for using `ZSH` env variable instead of hardcoding `${HOME}/.oh-my-zsh` in multiple places.
 
 ### 2.0.31
 

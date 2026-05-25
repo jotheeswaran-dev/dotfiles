@@ -22,6 +22,12 @@ export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-"${HOME}/.config"}"
 export XDG_DATA_HOME="${XDG_DATA_HOME:-"${HOME}/.local/share"}"
 export XDG_STATE_HOME="${XDG_STATE_HOME:-"${HOME}/.local/state"}"
 
+# Load zsh/datetime early so $EPOCHSECONDS and strftime are available throughout
+# .shellrc (used by step timing helpers and print_script_start/duration).
+# This is a zsh built-in module — no subprocess, no external binary.
+# Guard with ZSH_VERSION: direnv evaluates .shellrc in bash, which has no zmodload.
+[[ -n "${ZSH_VERSION-}" ]] && zmodload zsh/datetime
+
 # Note: Change these as per your settings. Deleting/commenting them will essentially unset the var(s) after the shell session is restarted and thus any aliases/backup-operations/etc will not be processed for those deleted variable(s)
 
 # ------------ Customizable env vars (MUST BE CHANGED to your values) ------------
@@ -49,7 +55,8 @@ export PERSONAL_BIN_DIR="${HOME}/personal/dev/bin"
 export PERSONAL_CONFIGS_DIR="${HOME}/personal/dev/configs"
 
 # All browser profiles are captured in this folder (might contain sensitive info like browsing history and so is considered private)
-export PERSONAL_PROFILES_DIR="${HOME}/personal/$(whoami)/browser-profiles"
+# Use ${USER} (zsh/PAM builtin) instead of $(whoami) to avoid forking a subprocess on every shell start.
+export PERSONAL_PROFILES_DIR="${HOME}/personal/${USER}/browser-profiles"
 
 # Keybase home repo name
 export KEYBASE_HOME_REPO_NAME='home'
@@ -72,7 +79,10 @@ export LANG='en_US.UTF-8'
 export LC_ALL='en_US.UTF-8'
 export LESSCHARSET='utf-8'
 
-# Cache the architecture check to avoid calling `uname` repeatedly
+# On a vanilla OS, for some reason MACHTYPE does not report 'arm' correctly - could be
+# due to the older version of zsh. So, fallback to 'uname -m'.
+# the /#arm/arm64 substitution maps 'arm' → 'arm64' while leaving 'x86_64' unchanged.
+# The outer ${ARCH:-...} honours any value already exported by a parent process.
 export ARCH="${ARCH:-"$(uname -m)"}"
 export ARCHFLAGS="-arch ${ARCH}"
 
@@ -119,10 +129,20 @@ is_zsh() {
   [[ "${0}" =~ 'zsh' ]]
 }
 
-# replace the value of the 'HOME' variable with '~' to shorten the text length
+# Replaces the value of HOME with '~' to shorten displayed paths.
+# Pure-zsh parameter expansion — no subprocess fork.
+#
+# Color functions apply tilde substitution automatically via _colorize, so any
+# path passed through a color function is display-ready without an explicit call
+# here. Call this explicitly only for:
+#   - Bare echo/printf call sites that display paths WITHOUT a color wrapper.
+#   - Plain-text segments in section headers (not passed through a color function).
+#
+# NOTE: when searching for all substitution sites, also grep for '_colorize' —
+# it centralises the inline expansion ${2//${HOME}/~} (see comment there for why
+# it is inlined rather than calling this function).
 replace_home_with_tilde() {
-  local escaped_home="$(echo "${HOME}" | sed "s/\//\\\\\//g")"
-  echo "${1}" | sed "s/${escaped_home}/~/"
+  echo "${1//${HOME}/~}"
 }
 
 is_zero_string() {
@@ -139,9 +159,10 @@ strip_trailing_slash() {
 }
 
 extract_last_segment() {
-  local without_trailing_slash="$(strip_trailing_slash "${1}")"
-  echo "${without_trailing_slash##*/}"
-  unset without_trailing_slash
+  # Two-step form: bash-compatible (direnv evaluates .shellrc in bash).
+  # Zsh nested expansion ${${1%/}##*/} would be cleaner but is zsh-only.
+  local _tmp="${1%/}"
+  echo "${_tmp##*/}"
 }
 
 extract_first_word() {
@@ -154,10 +175,6 @@ extract_first_word() {
 # --------------------------------------------------------------------------
 # 1b. Terminal colors
 # --------------------------------------------------------------------------
-
-colorize() {
-  printf "\x1b[${1}m"
-}
 
 # Do not use colors if there's no terminal
 if ! is_running_in_tty; then
@@ -179,111 +196,114 @@ if ! is_running_in_tty; then
   LIGHT_GRAY=''
   WHITE=''
 else
-  NC=$(colorize '0') # No Color
-  BLACK=$(colorize '0;30')
-  DARK_GRAY=$(colorize '1;30')
-  RED=$(colorize '0;31')
-  LIGHT_RED=$(colorize '1;31')
-  GREEN=$(colorize '0;32')
-  LIGHT_GREEN=$(colorize '1;32')
-  ORANGE=$(colorize '0;33')
-  YELLOW=$(colorize '1;33')
-  BLUE=$(colorize '0;34')
-  LIGHT_BLUE=$(colorize '1;34')
-  PURPLE=$(colorize '0;35')
-  LIGHT_PURPLE=$(colorize '1;35')
-  CYAN=$(colorize '0;36')
-  LIGHT_CYAN=$(colorize '1;36')
-  LIGHT_GRAY=$(colorize '0;37')
-  WHITE=$(colorize '1;37')
+  # Variables are assigned as $'\e[...' literals — avoids $(colorize ...) subshell
+  # forks on every shell start.
+  NC=$'\e[0m'         # No Color
+  BLACK=$'\e[0;30m'
+  DARK_GRAY=$'\e[1;30m'
+  RED=$'\e[0;31m'
+  LIGHT_RED=$'\e[1;31m'
+  GREEN=$'\e[0;32m'
+  LIGHT_GREEN=$'\e[1;32m'
+  ORANGE=$'\e[0;33m'
+  YELLOW=$'\e[1;33m'
+  BLUE=$'\e[0;34m'
+  LIGHT_BLUE=$'\e[1;34m'
+  PURPLE=$'\e[0;35m'
+  LIGHT_PURPLE=$'\e[1;35m'
+  CYAN=$'\e[0;36m'
+  LIGHT_CYAN=$'\e[1;36m'
+  LIGHT_GRAY=$'\e[0;37m'
+  WHITE=$'\e[1;37m'
 fi
 
-blue() {
-  printf "${BLUE}$(replace_home_with_tilde "${1}")${NC}"
-}
+# Single implementation point for all color functions — mirrors the private
+# colorize() method in string.rb. Applies tilde substitution AND wraps in ANSI
+# codes; public color functions below are one-line delegators.
+# $1 = ANSI color variable (e.g. ${YELLOW}), $2 = string to colorize.
+#
+# Why inline ${2//${HOME}/~} rather than calling replace_home_with_tilde "${2}":
+# replace_home_with_tilde prints via 'echo', so capturing it requires a $()
+# subshell fork on every call. The inline expansion is a no-fork zsh built-in.
+_colorize() { printf "${1}${2//${HOME}/~}${NC}"; }
 
-light_blue() {
-  printf "${LIGHT_BLUE}$(replace_home_with_tilde "${1}")${NC}"
-}
+# Color functions — ordered by ANSI SGR code (matches variable declarations above).
+black()        { _colorize "${BLACK}"        "${1}"; }
+dark_gray()    { _colorize "${DARK_GRAY}"    "${1}"; }
+red()          { _colorize "${RED}"          "${1}"; }
+light_red()    { _colorize "${LIGHT_RED}"    "${1}"; }
+green()        { _colorize "${GREEN}"        "${1}"; }
+light_green()  { _colorize "${LIGHT_GREEN}"  "${1}"; }
+orange()       { _colorize "${ORANGE}"       "${1}"; }
+yellow()       { _colorize "${YELLOW}"       "${1}"; }
+blue()         { _colorize "${BLUE}"         "${1}"; }
+light_blue()   { _colorize "${LIGHT_BLUE}"   "${1}"; }
+purple()       { _colorize "${PURPLE}"       "${1}"; }
+light_purple() { _colorize "${LIGHT_PURPLE}" "${1}"; }
+cyan()         { _colorize "${CYAN}"         "${1}"; }
+light_cyan()   { _colorize "${LIGHT_CYAN}"   "${1}"; }
+light_gray()   { _colorize "${LIGHT_GRAY}"   "${1}"; }
+white()        { _colorize "${WHITE}"        "${1}"; }
 
-purple() {
-  printf "${PURPLE}$(replace_home_with_tilde "${1}")${NC}"
-}
-
-light_purple() {
-  printf "${LIGHT_PURPLE}$(replace_home_with_tilde "${1}")${NC}"
-}
-
-cyan() {
-  printf "${CYAN}$(replace_home_with_tilde "${1}")${NC}"
-}
-
-light_cyan() {
-  printf "${LIGHT_CYAN}$(replace_home_with_tilde "${1}")${NC}"
-}
-
-green() {
-  printf "${GREEN}$(replace_home_with_tilde "${1}")${NC}"
-}
-
-light_green() {
-  printf "${LIGHT_GREEN}$(replace_home_with_tilde "${1}")${NC}"
-}
-
-red() {
-  printf "${RED}$(replace_home_with_tilde "${1}")${NC}"
-}
-
-light_red() {
-  printf "${LIGHT_RED}$(replace_home_with_tilde "${1}")${NC}"
-}
-
-yellow() {
-  printf "${YELLOW}$(replace_home_with_tilde "${1}")${NC}"
-}
-
+# Logging functions are pure formatters: prefix + message. They do NOT apply
+# tilde substitution. Any path in the message must be passed through a color
+# function (yellow/cyan/etc.) which applies substitution automatically, or
+# through replace_home_with_tilde for uncolored plain-text path segments.
 success() {
-  echo "✅ $(green '**SUCCESS**') $(replace_home_with_tilde "${1}")"
+  echo "✅ $(green '**SUCCESS**') ${1}"
 }
 
 info() {
-  echo "ℹ️ $(cyan '**INFO**') $(replace_home_with_tilde "${1}")"
+  echo "ℹ️ $(cyan '**INFO**') ${1}"
 }
 
 warn() {
-  echo "⚠️ $(light_red '**WARN**') $(replace_home_with_tilde "${1}")"
+  echo "⚠️ $(light_red '**WARN**') ${1}"
 }
 
 debug() {
-  echo "⚙️ $(light_purple '**DEBUG**') $(replace_home_with_tilde "${1}")"
+  echo "⚙️ $(light_purple '**DEBUG**') ${1}"
 }
 
 error() {
-  echo "❌ $(red '**ERROR**') ${1} 🤓"
-  osascript -e "display notification \"${1} 🤓\""
+  # Inline substitution rather than a color function: the message body is output
+  # as plain text (no color wrapper) and also passed to osascript, which receives
+  # a raw string — ANSI codes would appear as literal escape characters there.
+  local _msg="${1//${HOME}/~}"
+  echo "❌ $(red '**ERROR**') ${_msg} 🤓"
+  osascript -e "display notification \"${_msg} 🤓\""
   return 1
 }
 
 print_chars_for_length() {
   local char="${1:--}"  # default to using '-'
-  local final_length=${2:-$(($(tput cols)/4))}
+  # ${COLUMNS} is a zsh special variable updated on SIGWINCH — no tput fork needed.
+  local final_length=${2:-$(( COLUMNS / 4 ))}
   printf "${char}%.0s" {1..${final_length}}
 }
 
 # Internal helper shared by section_header and section_header2.
 # Usage: _section_header_impl <header> <char> <glyph> <color_fn> <indent>
 _section_header_impl() {
-  local header="$(replace_home_with_tilde "${1}")"
+  # Inline substitution rather than a color function: the header is output as
+  # plain text between the two colored padding segments — it has no color wrapper,
+  # so color functions cannot apply tilde sub on its behalf.
+  local header="${1//${HOME}/~}"
   local char="${2}"
   local glyph="${3}"
   local color_fn="${4}"
   local indent="${5:-}"
   local indent_len=${#indent}
-  local viewport_length=$(tput cols)
+  # ${COLUMNS} is a zsh special variable — no tput subprocess fork needed.
+  local viewport_length=${COLUMNS}
   local header_length=${#header}
   local final_length=$(( (viewport_length - header_length - indent_len) / 2 - 10 ))
 
-  echo "${indent}$(${color_fn} $(print_chars_for_length "${char}" ${final_length})) ${glyph} ${header} $(${color_fn} $(print_chars_for_length "${char}" ${final_length}))"
+  # Pre-compute the padding string once to avoid calling print_chars_for_length
+  # twice via $(...) — each $(...) call forks a subshell.
+  local padding
+  printf -v padding "${char}%.0s" {1..${final_length}}
+  echo "${indent}$(${color_fn} "${padding}") ${glyph} ${header} $(${color_fn} "${padding}")"
 }
 
 section_header() {
@@ -297,17 +317,24 @@ section_header2() {
 }
 
 print_script_start() {
-  echo "$(purple '==>') $(yellow 'Script started at:') $(light_blue "$(date '+%Y-%m-%d %H:%M:%S')")"
+  local now
+  # strftime -s writes directly into 'now' — no $(date) subprocess fork.
+  strftime -s now '%Y-%m-%d %H:%M:%S' "${EPOCHSECONDS}"
+  echo "$(purple '==>') $(yellow 'Script started at:') $(light_blue "${now}")"
 }
 
 print_script_duration() {
   local start_time_seconds="${1}"
-  local end_time_seconds=$(date +%s)
-  local end_time_human=$(date '+%Y-%m-%d %H:%M:%S')
+  local end_time_human
+  # strftime -s and $EPOCHSECONDS replace $(date +%s) / $(date '+...') forks.
+  strftime -s end_time_human '%Y-%m-%d %H:%M:%S' "${EPOCHSECONDS}"
+  local end_time_seconds="${EPOCHSECONDS}"
   local duration=$((end_time_seconds - start_time_seconds))
 
   # Simple duration formatting (you could make this fancier if needed)
-  local duration_human=$(printf '%02dh:%02dm:%02ds' $((duration/3600)) $((duration%3600/60)) $((duration%60)))
+  # printf -v writes directly into the variable — no $(...) subshell fork.
+  local duration_human
+  printf -v duration_human '%02dh:%02dm:%02ds' $((duration/3600)) $((duration%3600/60)) $((duration%60))
 
   echo "$(purple '==>') $(yellow 'Script finished at:') $(light_blue "${end_time_human}") ($(yellow 'Total duration:') $(light_blue "${duration_human}") $(yellow 'seconds'))."
 }
@@ -319,6 +346,28 @@ print_script_duration() {
 # Stack of epoch-second timestamps for the overall script-start epoch.
 # Initialised on first use and overridable by sub-scripts that need their
 # own baseline without clobbering an outer script's value.
+# Two consumers, two mechanisms — intentionally separate:
+#
+#   print_script_duration <start_time>
+#     Takes its start time as an explicit argument (a local variable captured
+#     at the top of main()).  This keeps it self-contained and usable by
+#     scripts that never call step_start/step_end (e.g. run-all.sh,
+#     cleanup-browser-profiles.sh) — those scripts do NOT push to
+#     SCRIPT_START_TIMES and have no need to.
+#
+#   step_end
+#     Needs a "total elapsed since script start" value independently of
+#     whatever argument was passed to print_script_duration.  It reads
+#     SCRIPT_START_TIMES[-1] for this.  Scripts that call step_start/step_end
+#     (fresh-install-of-osx.sh, software-updates-cron.sh) MUST push their
+#     start epoch onto SCRIPT_START_TIMES so step_end's total-elapsed column
+#     is correct.
+#
+# Consequence: if step_start/step_end are ever added to a script that
+# currently only calls print_script_duration (run-all.sh,
+# cleanup-browser-profiles.sh), that script must also be updated to push its
+# start epoch onto SCRIPT_START_TIMES, otherwise step_end will fall back to
+# the current time and report 0s total elapsed.
 typeset -a SCRIPT_START_TIMES=()
 # Stack of epoch-second timestamps for the overall step-start epoch,
 # supporting nested step_start/step_end calls.
@@ -329,20 +378,20 @@ typeset -a STEP_START_TIMES=()
 # call multiple times.
 step_timing_init() {
   if [[ ${#SCRIPT_START_TIMES[@]} -eq 0 ]]; then
-    SCRIPT_START_TIMES+=("$(date +%s)")
+    SCRIPT_START_TIMES+=("${EPOCHSECONDS}")
   fi
 }
 
 # Record the start of a step.  Should be called just before section_header.
 step_start() {
   step_timing_init
-  STEP_START_TIMES+=("$(date +%s)")
+  STEP_START_TIMES+=("${EPOCHSECONDS}")
 }
 
 # Print how long the most recent step took, plus total elapsed since init.
 step_end() {
   local now delta_step delta_total h m s
-  now=$(date +%s)
+  now="${EPOCHSECONDS}"
 
   # Pop the most recent step start time from the stack.
   # If the step stack is empty (e.g. step_end called without a matching
@@ -367,7 +416,8 @@ step_end() {
   m=$(( (delta_step % 3600) / 60 ))
   s=$(( delta_step % 60 ))
   local step_human
-  step_human=$(printf '%dh:%02dm:%02ds' "$h" "$m" "$s")
+  # printf -v writes directly into the variable — no $(...) subshell fork.
+  printf -v step_human '%dh:%02dm:%02ds' "$h" "$m" "$s"
 
   # Use the most recently pushed script-start epoch for total elapsed.
   local script_start_time="${SCRIPT_START_TIMES[-1]}"
@@ -376,7 +426,7 @@ step_end() {
   m=$(( (delta_total % 3600) / 60 ))
   s=$(( delta_total % 60 ))
   local total_human
-  total_human=$(printf '%dh:%02dm:%02ds' "$h" "$m" "$s")
+  printf -v total_human '%dh:%02dm:%02ds' "$h" "$m" "$s"
 
   echo "$(purple '    ⏱') $(yellow 'step:') $(light_blue "${step_human}") $(yellow '| elapsed:') $(light_blue "${total_human}")"
 }
@@ -414,7 +464,12 @@ is_non_empty_file() {
 }
 
 is_directory_empty() {
-  is_directory "${1}" && is_zero_string "$(ls -A "${1}")"
+  # $(ls -A) kept intentionally — the pure-zsh glob alternative (*(ND[1])) cannot
+  # be used here because .shellrc is sourced by direnv in bash, and bash has no
+  # zsh glob qualifiers.  A ZSH_VERSION branch was considered but rejected: the
+  # function is only called a handful of times (set_ssh_folder_permissions, .envrc
+  # gnupg check), never on the startup hot path, so the ls fork cost is negligible.
+  is_directory "${1}" && [[ -z "$(ls -A "${1}")" ]]
 }
 
 ensure_dir_exists() {
@@ -432,7 +487,7 @@ is_git_repo() {
 }
 
 load_file_if_exists() {
-  is_file "${1}" && source "${1}" || warn "Couldn't load file: '${1}'"
+  is_file "${1}" && source "${1}" || warn "Couldn't load file: '$(yellow "${1}")'"
 }
 
 # delete_directory_if_exists() {
@@ -507,12 +562,18 @@ keep_sudo_alive() {
   step_end
 }
 
+#####################################################
+# Build the keybase url for the specified repo name #
+#####################################################
 build_keybase_repo_url() {
   echo "keybase://private/${KEYBASE_USERNAME}/${1}"
 }
 
+#####################################################################################
+# Clone a git repo into a temp folder, and then move to the specified target folder #
+#####################################################################################
 clone_repo_into() {
-  local start_time=$(date +%s)
+  local start_time=${EPOCHSECONDS}  # $EPOCHSECONDS from zsh/datetime — no $(date +%s) fork
   local target_folder="${2}"
   ensure_dir_exists "${target_folder}"
   if ! is_git_repo "${target_folder}"; then
@@ -549,7 +610,7 @@ clone_repo_into() {
   # also update submodules if already a git repo since the submodule changes might be present in the new commits that are being pulled in
   GIT_SSH_COMMAND="ssh -o ConnectTimeout=20 -o ServerAliveInterval=10 -o ServerAliveCountMax=3" git -C "${target_folder}" submodule update --init --recursive --remote --rebase --force
   unset target_folder
-  local end_time=$(date +%s)
+  local end_time=${EPOCHSECONDS}  # no $(date +%s) fork
   local duration=$((end_time - start_time))
   debug "Clone process took ${duration} seconds"
 }
@@ -614,7 +675,10 @@ restore_cron() {
     return 0 # Success, nothing to do
   fi
 
-  ensure_dir_exists "$(dirname "${cron_file}")"
+  # ${cron_file:h} is the pure-zsh dirname equivalent — no $(dirname ...) fork.
+  # restore_cron is only ever called from zsh contexts (suspend_cron/resume_cron
+  # in .aliases, recron alias) so :h is safe here; .envrc never reaches this function.
+  ensure_dir_exists "${cron_file:h}"
 
   crontab "${cron_file}" || error 'Failed to restore crontab.'
 }

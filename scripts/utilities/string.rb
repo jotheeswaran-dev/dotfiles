@@ -6,9 +6,25 @@ require 'pathname'  # Note: This has been added explicitly due to the default ve
 HOME_PATH_STR = Pathname.new(ENV.fetch('HOME')).expand_path.to_s.freeze
 
 class String
-  # Wraps the string in the ANSI escape sequence for +code+.
-  # Returns the string unchanged when stdout is not a TTY (pipes, CI, etc.),
-  # mirroring the shell's conditional color variable assignment.
+  # Wraps the string in the ANSI escape sequence for +code+, after replacing
+  # the HOME path with '~' so any path argument is display-ready automatically.
+  # Returns the string unchanged (no ANSI, no substitution) when stdout is not
+  # a TTY (pipes, CI, etc.), mirroring the shell's conditional color variables.
+  #
+  # Design: color methods apply tilde substitution so callers never need to
+  # pre-substitute before passing a path to .yellow, .cyan, etc. Logging methods
+  # (success/info/warn/debug/error) do NOT apply substitution — they rely on
+  # color methods having already done so for any colorized path segments.
+  # Bare puts/print call sites that display paths WITHOUT a color method must
+  # still call replace_home_path_with_tilde explicitly.
+  #
+  # This is the Ruby equivalent of _colorize() in .shellrc — both are the single
+  # centralised implementation point that all public color functions delegate to.
+  # Why call replace_home_path_with_tilde directly here rather than inlining
+  # gsub(HOME_PATH_STR, '~'): Ruby method calls have no fork overhead, so calling
+  # the utility method keeps the substitution logic in one place. The shell's
+  # _colorize inlines ${2//${HOME}/~} instead because replace_home_with_tilde
+  # prints via 'echo' and capturing it would require a $(...) subshell fork.
   #
   # @api private
   # @param code [String] SGR parameter sequence, e.g. "0;31" (normal red) or "1;34" (bright blue).
@@ -16,12 +32,18 @@ class String
   def colorize(code)
     return self unless $stdout.isatty
 
-    "\x1b[#{code}m#{self}\x1b[0m"
+    "\x1b[#{code}m#{replace_home_path_with_tilde}\x1b[0m"
   end
   private :colorize
 
   # Replaces the expanded HOME path with '~' to produce a shorter, human-readable path.
   # Returns the string unchanged if it does not contain the home directory path.
+  #
+  # Design: color methods (.yellow, .cyan, etc.) call this automatically, so any
+  # path passed through a color method is display-ready without an explicit call here.
+  # Call this explicitly only for:
+  #   - Bare puts/print call sites that display paths WITHOUT a color method.
+  #   - Plain-text segments in section headers not wrapped in a color method.
   #
   # @return [String]
   def replace_home_path_with_tilde

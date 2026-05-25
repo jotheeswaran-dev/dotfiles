@@ -21,7 +21,8 @@
 # execute 'ZSH_PROFILE_RC=true zsh -i -c exit' and run 'zprof' to get the details
 [[ -n "${ZSH_PROFILE_RC+1}" ]] && zmodload zsh/zprof
 
-type is_shellrc_sourced &>/dev/null || source "${HOME}/.shellrc"
+# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
+(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
 
 # Initialize starship prompt.
 # Note: Must be initialized AFTER oh-my-zsh is loaded (see further below), so the actual
@@ -123,25 +124,29 @@ plugins=(direnv eza fast-syntax-highlighting git iterm2 mise sudo zbell zsh-auto
   local brew_bin="${HOMEBREW_PREFIX}/bin/brew"
   local cache_file="${XDG_CACHE_HOME}/brew-shellenv-cache.zsh"
   # Use the brew binary's modification time as cache key (no need to run brew at all for the check)
-  if [[ ! -f "${cache_file}" ]] || [[ "${brew_bin}" -nt "${cache_file}" ]]; then
+  if ! is_file "${cache_file}" || [[ "${brew_bin}" -nt "${cache_file}" ]]; then
     # Run brew shellenv in a subshell to get brew vars + path_helper result without polluting current PATH
-    local brew_path brew_cellar brew_repo brew_infopath brew_manpath brew_extra_path
+    local brew_cellar brew_repo brew_infopath brew_manpath brew_prefix
     eval "$("${brew_bin}" shellenv 2>/dev/null)"
+    brew_prefix="${HOMEBREW_PREFIX}"
     brew_cellar="${HOMEBREW_CELLAR}"
     brew_repo="${HOMEBREW_REPOSITORY}"
     brew_infopath="${INFOPATH}"
     brew_manpath="${MANPATH}"
-    # Capture only the homebrew-specific path prefix (path_helper result minus what was already in PATH)
     # Write a static cache: static exports + fpath update (no subprocess calls when cache is sourced)
     {
+      echo "export HOMEBREW_PREFIX='${brew_prefix}';"
       echo "export HOMEBREW_CELLAR='${brew_cellar}';"
       echo "export HOMEBREW_REPOSITORY='${brew_repo}';"
       echo "export INFOPATH='${brew_infopath}';"
       echo "export MANPATH='${brew_manpath}';"
-      echo "fpath=('/opt/homebrew/share/zsh/site-functions' \"\${fpath[@]}\"); export FPATH;"
+      # fpath assignment is sufficient — zsh keeps fpath and FPATH in sync automatically.
+      # Exporting FPATH leaks it into child processes and launchd user-session environment;
+      # typeset +x at the bottom of this file strips the export flag after all sources.
+      echo "fpath=('${brew_prefix}/share/zsh/site-functions' \"\${fpath[@]}\");"
     } >| "${cache_file}" 2>/dev/null
   fi
-  [[ -f "${cache_file}" ]] && source "${cache_file}"
+  load_file_if_exists "${cache_file}"
 }
 
 # according to https://github.com/zsh-users/zsh-completions/issues/603#issue-373185486, this can't be added as a plugin to omz for the fpath to work correctly
@@ -149,26 +154,48 @@ append_to_fpath_if_dir_exists "${ZSH_CUSTOM}/plugins/zsh-completions/src"
 
 load_file_if_exists "${HOMEBREW_PREFIX}/opt/git-extras/share/git-extras/git-extras-completion.zsh"
 
-# Optimize compinit: override compinit to use '-C' flag (skip compaudit scan) when dump file exists.
-# OMZ calls compinit without '-C', causing a ~11ms compaudit filesystem scan every startup.
-# The '-C' flag is safe here because we control all fpath directories on this personal machine.
-# The override is removed after compinit runs so subsequent calls behave normally.
-function compinit() {
-  unfunction compinit  # remove override so the real compinit can be loaded
+# compinit: use -C (skip compaudit scan) when the dump file already exists,
+# saving ~11ms per startup. Safe on a personal machine where we control all
+# fpath directories. ZSH_COMPDUMP is set to XDG_CACHE_HOME to keep ~ clean.
+export ZSH_COMPDUMP="${XDG_CACHE_HOME}/zcompdump"
+() {
   autoload -Uz compinit
-  # If the dump file exists, use -C to skip compaudit; otherwise do a full init
-  local dump="${ZSH_COMPDUMP:-${ZDOTDIR:-$HOME}/.zcompdump}"
-  if [[ -f "$dump" ]]; then
-    compinit -C "$@"
+  if is_file "${ZSH_COMPDUMP}"; then
+    compinit -C -d "${ZSH_COMPDUMP}"
   else
-    compinit "$@"
+    compinit -d "${ZSH_COMPDUMP}"
   fi
 }
 
 load_file_if_exists "${ZSH}/oh-my-zsh.sh"
 
-# Initialize starship prompt (must be after oh-my-zsh so it wins the PROMPT setup)
-command_exists starship && eval "$(starship init zsh)"
+# Initialize starship prompt (must be after plugins so it wins the PROMPT setup).
+#
+# Performance optimisation — cache `starship init zsh` output to avoid forking a
+# subprocess on every shell start (~10-15ms saving).  The cache is keyed on the
+# starship binary mtime and regenerated only when starship itself is updated
+# (e.g. after `brew upgrade`).
+#
+# NOTE: Deferring the source of the cache via a precmd hook was attempted but
+# causes 'setopt promptsubst' (emitted by starship's init) to be scoped to the
+# precmd function and unset on return (due to 'setopt local_options' in .zshrc),
+# which leaves PROMPT as an unexpanded literal string after the first command.
+# The cache is therefore sourced directly at startup; the ~5ms cost of sourcing
+# the pre-parsed .zwc bytecode is acceptable.
+if command_exists starship; then
+  () {
+    # $commands[] is an O(1) zsh hash lookup — no subprocess fork needed.
+    local starship_bin="${commands[starship]}"
+    local cache="${XDG_CACHE_HOME}/starship-init-cache.zsh"
+    # Regenerate the cache only when the starship binary is newer than the cache file.
+    if ! is_file "${cache}" || [[ "${starship_bin}" -nt "${cache}" ]]; then
+      starship init zsh >| "${cache}" 2>/dev/null
+    fi
+    # Source directly at the top level (not deferred) so that 'setopt promptsubst'
+    # emitted by the cache takes effect globally and is not scoped to a function.
+    load_file_if_exists "${cache}"
+  }
+fi
 
 # User configuration
 # export MANPATH="/usr/local/man${MANPATH+:$MANPATH}"
@@ -184,8 +211,9 @@ else
   # Preferred editor for local sessions
   local preferred_editors=('zed --wait' 'code --wait' 'vi')
   for editor in "${preferred_editors[@]}"; do
-    # Take only the first word as the name to test for existence of the executable
-    if command_exists "$(extract_first_word "${editor}")"; then
+    # ${editor%% *} strips everything after the first space — pure zsh, no fork.
+    # Equivalent to extract_first_word but avoids a subshell invocation.
+    if command_exists "${editor%% *}"; then
       export EDITOR="${editor}"
       break
     fi
@@ -193,17 +221,7 @@ else
   unset preferred_editors
 fi
 
-# Set personal aliases, overriding those provided by Oh My Zsh libs,
-# plugins, and themes. Aliases can be placed here, though Oh My Zsh
-# users are encouraged to define aliases within a top-level file in
-# the ${ZSH_CUSTOM} folder, with .zsh extension. Examples:
-# - ${ZSH_CUSTOM}/aliases.zsh
-# - ${ZSH_CUSTOM}/macos.zsh
 # For a full list of active aliases, run `alias`.
-#
-# Example aliases
-# alias zshconfig="${EDITOR} ${ZDOTDIR}/.zshrc"
-# alias ohmyzsh="${EDITOR} ${ZSH}"
 
 # setup paths in the beginning so that all other conditions work correctly
 append_to_path_if_dir_exists "${PERSONAL_BIN_DIR}"
@@ -252,8 +270,9 @@ if is_macos; then
   setopt pushd_silent             # do not print the directory stack after pushd or popd
   setopt share_history            # share history between different instances of the shell
 
-  # console colors
-  autoload -Uz colors && colors
+  # Note: 'autoload -Uz colors && colors' was removed — none of the active plugins
+  # use $fg/$bg/$color from the colors function. Our own color vars ($BLUE, $RED, etc.)
+  # are defined as $'\e[...' literals in .shellrc and don't depend on colors.
 
   # colorize completion
   # zstyle ':completion:*:*:kill:*:processes' list-colors "=(#b) #([0-9]#)*=$color[cyan]=$color[red]"
@@ -378,9 +397,12 @@ if is_directory "${XDG_CONFIG_HOME}/zsh"; then
 
   # Dynamically autoload all files in the custom zsh functions directory.
   # Assumes the filename is the function name.
+  # :t extracts the basename — autoload expects the function name, not the full
+  # path; passing the full path would define a function named e.g.
+  # '~/.config/zsh/myfunc' which can never be invoked by short name.
   local func_file
   for func_file in "${XDG_CONFIG_HOME}"/zsh/*(N); do
-    autoload -Uz "${func_file}"
+    autoload -Uz "${func_file:t}"
   done
   unset func_file
 fi
@@ -400,9 +422,13 @@ manpath=( "${manpath[@]:#}" )
 # remove duplicates from some env vars
 typeset -gU cdpath CPPFLAGS cppflags FPATH fpath infopath LDFLAGS ldflags MANPATH manpath PATH path PKG_CONFIG_PATH
 
-# Use modern completion system (needs to be run AFTER some zstyle defns and setting up of *paths; usually a good idea to do so after all of them)
-# Note: compinit is already called by oh-my-zsh.sh above. This call was redundant and added an extra ~11ms (compaudit) on startup.
-# autoload -Uz compinit && compinit -C -d "${XDG_CACHE_HOME}/zcompdump-${ZSH_VERSION}" &>/dev/null || true
+# fpath/FPATH and cdpath/CDPATH must NOT be exported — both are zsh-internal variables
+# (autoload search path and cd search path respectively). Exporting them causes their
+# contents to leak into child processes and persist in the macOS launchd user-session
+# environment, where they are inherited by every new shell before any rc file runs.
+# All other *path vars on line 367 (PATH, MANPATH, INFOPATH, CPPFLAGS, LDFLAGS,
+# PKG_CONFIG_PATH) are intentionally exported — child processes need them.
+typeset +x FPATH fpath cdpath CDPATH
 
 # for profiling zsh, see: https://unix.stackexchange.com/a/329719/27109
 # execute 'ZSH_PROFILE_RC=true zsh' and run 'zprof' to get the details

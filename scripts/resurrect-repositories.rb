@@ -336,7 +336,7 @@ def resurrect_each(repo, idx, total)
           info("Updating remote '#{name}' URL from '#{existing_remotes[name]}' to '#{remote}'")
           _stdout, stderr, status = Open3.capture3(*git_base_cmd, REMOTE_KEY_NAME, 'set-url', name, remote)
           unless status.success?
-            warn("Failed to update URL for remote '#{name}' in repo '#{folder.replace_home_path_with_tilde}' (status: #{status.exitstatus})")
+            warn("Failed to update URL for remote '#{name}' in repo '#{folder}' (status: #{status.exitstatus})")
             warn("STDERR: #{stderr.strip}".red) unless nil_or_empty?(stderr.strip)
           end
         end
@@ -344,7 +344,7 @@ def resurrect_each(repo, idx, total)
         info("Adding remote '#{name}' -> '#{remote}'")
         _stdout, stderr, status = Open3.capture3(*git_base_cmd, REMOTE_KEY_NAME, 'add', name, remote)
         unless status.success?
-          warn("Failed to add remote '#{name}' for repo '#{folder.replace_home_path_with_tilde}' (status: #{status.exitstatus})")
+          warn("Failed to add remote '#{name}' for repo '#{folder}' (status: #{status.exitstatus})")
           warn("STDERR: #{stderr.strip}".red) unless nil_or_empty?(stderr.strip)
         end
       end
@@ -370,7 +370,7 @@ def resurrect_each(repo, idx, total)
       debug("Executing: #{command_str.dump}")
       _stdout, stderr, status = Open3.capture3(command_str)
       unless status.success?
-        warn("Post-clone command #{command_str.dump} failed for repo '#{folder.replace_home_path_with_tilde}' (exit status: #{status.exitstatus})")
+        warn("Post-clone command #{command_str.dump} failed for repo '#{folder}' (exit status: #{status.exitstatus})")
         warn("STDERR: #{stderr.strip}".red) unless nil_or_empty?(stderr.strip)
       end
     end
@@ -418,7 +418,7 @@ def verify_all(repositories, discovered_count, filter, ref_folder: nil)
   puts("  Discovered repositories: #{discovered_count}")
   puts("  After filter:            #{repositories.length}") unless nil_or_empty?(filter)
   puts("  Verified entries:        #{common_repos.length.green}")
-  puts("  Common repositories:\n  #{common_repos.join("\n  ").replace_home_path_with_tilde.green}")
+  puts("  Common repositories:\n  #{common_repos.join("\n  ").green}")
   if diff_repos.any?
     warn("Please correlate the following #{diff_repos.length.red} differences in projects manually:\n  #{diff_repos.join("\n  ").light_red}")
     exit(1)
@@ -436,7 +436,7 @@ print_script_start
 if options[:generate]
   section_header('Generating repository configuration')
   discovery_dir = File.expand_path(options[:generate])
-  puts("#{'Discovering repos under discovery directory:'.yellow} '#{discovery_dir.replace_home_path_with_tilde.cyan}'")
+  puts("#{'Discovering repos under discovery directory:'.yellow} '#{discovery_dir.cyan}'")
   puts("#{'Using filter:'.yellow} '#{filter.cyan}'") unless nil_or_empty?(filter)
   repositories = find_git_repos_from_disk(discovery_dir)
   discovered_count = repositories.length
@@ -453,7 +453,7 @@ if options[:generate]
 elsif options[:resurrect]
   section_header('Resurrecting repositories')
   config_file = File.expand_path(options[:resurrect])
-  puts("#{'Config file:'.yellow} '#{config_file.replace_home_path_with_tilde.cyan}'")
+  puts("#{'Config file:'.yellow} '#{config_file.cyan}'")
   puts("#{'Using filter:'.yellow} '#{filter.cyan}'") unless nil_or_empty?(filter)
   repositories = read_git_repos_from_file(config_file)
   repositories = apply_filter(repositories, filter)
@@ -461,12 +461,12 @@ elsif options[:resurrect]
   failed_repos = []
   repositories.each.with_index(1) do |repo, idx|
     folder = repo[FOLDER_KEY_NAME]
-    info("[#{justify(idx)} of #{justify(repositories.length)}] #{'Resurrecting'.yellow}: '#{folder.replace_home_path_with_tilde.cyan}'")
+    info("[#{justify(idx)} of #{justify(repositories.length)}] #{'Resurrecting'.yellow}: '#{folder.cyan}'")
     begin
       resurrect_each(repo, idx, repositories.length)
       successful_repos << folder
     rescue StandardError => e
-      warn("Resurrection failed for '#{folder.replace_home_path_with_tilde}': #{e.message}")
+      warn("Resurrection failed for '#{folder}': #{e.message}")
       failed_repos << folder
     end
   end
@@ -478,17 +478,17 @@ elsif options[:resurrect]
   if failed_repos.any?
     puts("Failed:             #{failed_repos.length.red}")
     puts('Failed repositories:'.red)
-    failed_repos.each { |failed_folder| puts("  - '#{failed_folder.replace_home_path_with_tilde.red}'") }
+    failed_repos.each { |failed_folder| puts("  - '#{failed_folder.red}'") }
     print_script_duration(script_start_time)
     exit(1)
   end
 elsif options[:check]
   section_header('Verifying repositories')
   config_file = File.expand_path(options[:check])
-  puts("#{'Config file:'.yellow} '#{config_file.replace_home_path_with_tilde.cyan}'")
+  puts("#{'Config file:'.yellow} '#{config_file.cyan}'")
   puts("#{'Using filter:'.yellow} '#{filter.cyan}'") unless nil_or_empty?(filter)
   reference_folder = ENV['REF_FOLDER']&.then { |f| File.expand_path(f) }
-  puts("#{'Reference folder:'.yellow} '#{reference_folder.replace_home_path_with_tilde.cyan}'") unless nil_or_empty?(reference_folder)
+  puts("#{'Reference folder:'.yellow} '#{reference_folder.cyan}'") unless nil_or_empty?(reference_folder)
   repositories = read_git_repos_from_file(config_file)
   discovered_count = repositories.length
   repositories = apply_filter(repositories, filter)

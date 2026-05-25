@@ -9,7 +9,8 @@
 set -e
 
 # Source shellrc only once if any required function is missing
-type is_shellrc_sourced &>/dev/null || source "${HOME}/.shellrc"
+# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
+(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
 
 usage() {
   echo "$(red 'Usage'): $(yellow "${${(%):-%x}##*/}") -d <target-folder> -u <upstream-repo-owner>"

@@ -35,31 +35,37 @@ module Logging
   # ---------------------------------------------------------------------------
   # Semantic log-level helpers
   # These mirror success/info/warn/debug/error from .shellrc.
+  #
+  # These methods do NOT apply tilde substitution — color methods (.yellow,
+  # .cyan, etc.) do so automatically on their arguments. Logging methods are
+  # pure formatters: prefix + message. Bare puts/print call sites that display
+  # paths without a color method must call replace_home_path_with_tilde explicitly.
+  #
   # The shell's `error` calls `osascript` for a macOS notification; that
   # behaviour is omitted here since it is inappropriate for library code.
   # ---------------------------------------------------------------------------
 
   def success(message)
-    puts "✅ #{'**SUCCESS**'.green} #{message.replace_home_path_with_tilde}"
+    puts "✅ #{'**SUCCESS**'.green} #{message}"
   end
 
   def info(message)
-    puts "ℹ️  #{'**INFO**'.cyan} #{message.replace_home_path_with_tilde}"
+    puts "ℹ️  #{'**INFO**'.cyan} #{message}"
   end
 
   def warn(message)
-    puts "⚠️  #{'**WARN**'.light_red} #{message.replace_home_path_with_tilde}"
+    puts "⚠️  #{'**WARN**'.light_red} #{message}"
   end
 
   def debug(message)
-    puts "⚙️  #{'**DEBUG**'.light_purple} #{message.replace_home_path_with_tilde}"
+    puts "⚙️  #{'**DEBUG**'.light_purple} #{message}"
   end
 
   # Prints the error message and raises a +RuntimeError+ with that message,
   # terminating the current execution path unless rescued by the caller.
   # @raise [RuntimeError]
   def error(message)
-    puts "❌ #{'**ERROR**'.red} #{message.replace_home_path_with_tilde} 🤓"
+    puts "❌ #{'**ERROR**'.red} #{message} 🤓"
     raise message
   end
 
@@ -170,9 +176,11 @@ module Logging
   end
 
   # Returns the current terminal column width, falling back to 80.
+  # $stdout.winsize[1] reads the terminal dimensions via ioctl — no `tput cols` subprocess fork.
+  # rescue 0 handles non-tty contexts (e.g. pipes, cron) gracefully.
   def terminal_width
     @terminal_width ||= begin
-      cols = `tput cols 2>/dev/null`.strip.to_i
+      cols = $stdout.winsize[1] rescue 0
       cols.nonzero? || 80
     end
   end

@@ -8,7 +8,8 @@
 set -euo pipefail
 
 # Source shell helpers if they aren't already loaded
-type is_shellrc_sourced &>/dev/null || source "${HOME}/.shellrc"
+# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
+(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
 
 usage() {
   cat <<EOF
@@ -44,8 +45,13 @@ main() {
 
   section_header "$(yellow 'Running commands in git repositories')"
 
+  # script_start_time is passed explicitly to print_script_duration below.
+  # This script does not call step_start/step_end so there is no need to push
+  # onto SCRIPT_START_TIMES.  If step_start/step_end are ever added here,
+  # this local must also be pushed onto SCRIPT_START_TIMES so step_end can
+  # compute total elapsed correctly (see design note in .shellrc).
   local script_start_time
-  script_start_time=$(date +%s)
+  script_start_time="${EPOCHSECONDS}"
   print_script_start
 
   local mindepth maxdepth folder filter
@@ -55,11 +61,21 @@ main() {
   filter="${FILTER:-}"
   local total_count count dir repo
 
-  echo "$(yellow "Finding git repos starting in folder '$(cyan "$(replace_home_with_tilde "${folder}")")' for a min depth of $(cyan "${mindepth}") and max depth of $(cyan "${maxdepth}")")"
+  echo "$(yellow "Finding git repos starting in folder '$(cyan "${folder}")' for a min depth of $(cyan "${mindepth}") and max depth of $(cyan "${maxdepth}")")"
   [[ "${filter}" != '' ]] && echo "$(yellow "Filtering with: $(cyan "${filter}")")"
 
-  # Find all .git directories and store their parent directory
-  local dir_array=("${(@f)$(find "${folder}" -mindepth "${mindepth}" -maxdepth "${maxdepth}" -type d -name '.git' -exec dirname {} \; 2>/dev/null | grep -iE "${filter}" | sort -u)}")
+  # Find all .git directories; use :h modifier for dirname, assoc array for sort -u dedup.
+  local -A _seen=()
+  local -a dir_array=()
+  while IFS= read -r git_dir; do
+    local d="${git_dir:h}"
+    [[ -n "${filter}" && ! "${d}" =~ ${filter} ]] && continue
+    if [[ -z "${_seen[${d}]}" ]]; then
+      _seen[${d}]=1
+      dir_array+=("${d}")
+    fi
+  done < <(find "${folder}" -mindepth "${mindepth}" -maxdepth "${maxdepth}" -type d -name '.git' 2>/dev/null)
+  unset _seen
 
   total_count=${#dir_array[@]}
 
@@ -70,12 +86,12 @@ main() {
   count=1
   for dir in "${dir_array[@]}"; do
     if is_directory "${dir}" && ! is_symbolic_link "${dir}"; then
-      info "[${count} of ${total_count}] '$(yellow "$*")' in '$(cyan "$(replace_home_with_tilde "${dir}")")'"
+      info "[${count} of ${total_count}] '$(yellow "$*")' in '$(cyan "${dir}")'"
       if (cd "${dir}" && eval "$@"); then
         successful_repos+=("${dir}")
       else
         failed_repos+=("${dir}")
-        warn "Command failed in: $(replace_home_with_tilde "${dir}")"
+        warn "Command failed in: $(red "${dir}")"
       fi
       ((count++))
     fi
@@ -90,7 +106,7 @@ main() {
     echo "Failed: $(red ${#failed_repos[@]})"
     echo "$(red 'Failed repositories:')"
     for repo in "${failed_repos[@]}"; do
-      echo "  - $(red "$(replace_home_with_tilde "${repo}")")"
+      echo "  - $(red "${repo}")"
     done
   fi
 

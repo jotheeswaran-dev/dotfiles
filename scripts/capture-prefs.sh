@@ -14,7 +14,8 @@
 set -e
 
 # Check for one key function defined in .shellrc to see if sourcing is needed
-type is_shellrc_sourced &>/dev/null || source "${HOME}/.shellrc"
+# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
+(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
 
 usage() {
   echo "$(red 'Usage'): $(yellow "${${(%):-%x}##*/}") [-e|-i]"
@@ -61,9 +62,16 @@ main() {
   local domains_file="${DOTFILES_DIR}/scripts/data/capture-prefs-domains.txt"
   ! is_file "${domains_file}" && error "Domains list file not found: ${domains_file}"
 
-  local app_array=("${(@f)$(grep -vE '^\s*#|^\s*$' "${domains_file}" || true)}")
+  local -a app_array=()
+  local _line
+  # while+read replaces $("${(@f)$(grep -vE ...)}"): no grep subprocess fork.
+  # =~ regex skips comment lines; ${_line//[[:space:]]/} detects blank lines.
+  while IFS= read -r _line; do
+    [[ "${_line}" =~ '^[[:space:]]*#' || -z "${_line//[[:space:]]/}" ]] && continue
+    app_array+=("${_line}")
+  done < "${domains_file}"
   if [[ ${#app_array[@]} -eq 0 ]]; then
-    warn "No domains found in ${domains_file}. Nothing to do."
+    warn "No domains found in '$(yellow "${domains_file}")'. Nothing to do."
     exit 0
   fi
 

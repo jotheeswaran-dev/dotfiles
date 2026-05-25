@@ -11,7 +11,8 @@
 # set -e
 
 # Source shell helpers if they aren't already loaded
-type is_shellrc_sourced &>/dev/null || source "${HOME}/.shellrc"
+# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
+(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
 
 # Script-level flag for silent mode; set by main() when -s is passed
 auto='N'
@@ -168,8 +169,9 @@ main() {
   ###############################################################################
 
   if ask 'Set computer name (as done via System Preferences → Sharing)' 'Y'; then
-    local username_in_camel_case="$(echo "$(whoami)" | awk '{$1=toupper(substr($1,0,1))substr($1,2)}1')"
-    local human_date="$(date '+%Y-%m-%d-%H-%M')"
+    local username_in_camel_case="${(C)USER}"
+    local human_date
+    strftime -s human_date '%Y-%m-%d-%H-%M' "${EPOCHSECONDS}"
 
     sudo scutil --set ComputerName "IND-CHN-${username_in_camel_case}'s MBP-${human_date}"
     sudo scutil --set HostName "${username_in_camel_case}-${human_date}"
@@ -1405,7 +1407,7 @@ main() {
   # KeepassXC                                                                   #
   ###############################################################################
   if ask 'KeepassXC settings' 'Y'; then
-    defaults write org.keepassxc.keepassxc 'NSNavLastRootDirectory' -string "${HOME}/personal/$(whoami)"
+    defaults write org.keepassxc.keepassxc 'NSNavLastRootDirectory' -string "${HOME}/personal/${USER}"
   fi
 
   ###############################################################################

@@ -13,7 +13,8 @@
 [[ -n "${DEBUG+1}" ]] && echo "loading ${0}"
 
 # DUPLICATE! Copied over since we get an error if the .shellrc was not loaded
-type is_shellrc_sourced &>/dev/null || source "${HOME}/.shellrc"
+# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
+(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
 
 # ==============================================================================
 # GROUP 3: Ongoing Daily-Use Aliases & Functions
@@ -47,12 +48,35 @@ command_exists ncdu && alias du='ncdu --color dark -r -x --exclude .git --exclud
 # 3c. Multi-repo git shortcuts (via run-all.sh)
 # --------------------------------------------------------------------------
 if command_exists 'run-all.sh'; then
-  # shortcuts to handle multiple git repos bypassing the omz auto-correct prompt for 'git'
+  # shortcuts to handle multiple git repos
   alias rug='run-all.sh git'
   alias all="FOLDER='${HOME}' MAXDEPTH=6 rug"
   alias home="FOLDER='${HOME}' FILTER='.bin|.dotfiles|zsh|mise' MAXDEPTH=5 rug"
   is_directory "${PERSONAL_PROFILES_DIR}" && alias profiles="FOLDER='${PERSONAL_PROFILES_DIR}' MAXDEPTH=5 rug"
-  if is_directory "${PROJECTS_BASE_DIR}"; then
+
+  # ---------------------------------------------------------------------------
+  # Dynamic per-project aliases (e.g. 'work-myrepo' -> run-all.sh scoped to
+  # that folder).  Building these requires a 'find' across PROJECTS_BASE_DIR
+  # which can take 50-200ms on a large dev tree.
+  #
+  # Optimisation: the alias definitions are written to a cache file and sourced
+  # on every shell start.  The cache is only regenerated when:
+  #   a) it does not exist yet, OR
+  #   b) PROJECTS_BASE_DIR itself is newer than the cache (i.e. a repo was
+  #      added or removed at the top level), OR
+  #   c) the user explicitly calls regenerate_repo_aliases.
+  #
+  # Call 'regenerate_repo_aliases' any time you add/remove a project folder
+  # at a level deeper than the top of PROJECTS_BASE_DIR.
+  # ---------------------------------------------------------------------------
+
+  # Internal: runs the find-based scan and writes alias definitions to stdout.
+  # Extracted so both the cache-builder and regenerate_repo_aliases can call it.
+  _generate_repo_aliases() {
+    if ! is_directory "${PROJECTS_BASE_DIR}"; then
+      return 0
+    fi
+
     local -A seen_parent_folders
     local -a parent_folders
 
@@ -74,10 +98,38 @@ if command_exists 'run-all.sh'; then
       for folder_path in "${parent_folders[@]}"; do
         local relative_path="${folder_path#${PROJECTS_BASE_DIR}/}"
         local hyphenated_txt="${relative_path//\//-}"
-        alias "${hyphenated_txt}"="FOLDER='${folder_path}' MAXDEPTH=4 rug" # alias name is the folder name with the base dir removed and '/' replaced with '-'
+        # Write alias definition to stdout so the caller can cache or eval it
+        # The alias name is the folder name with the base dir removed and '/' replaced with '-'
+        echo "alias ${hyphenated_txt}=\"FOLDER='${folder_path}' MAXDEPTH=4 rug\""
       done
-      unset folder_path
     fi
+  }
+
+  # Public: force-regenerates the cache and re-sources it in the current shell.
+  # Call this after adding or removing project directories.
+  regenerate_repo_aliases() {
+    local cache="${XDG_CACHE_HOME}/repo-aliases.zsh"
+    info "Regenerating repo aliases cache..."
+    _generate_repo_aliases >| "${cache}"
+    load_file_if_exists "${cache}"
+    # ${(f)$(<file)} reads the file without a fork (zsh built-in) and splits on
+    # newlines; ${#...[@]} counts elements — no wc -l subprocess.
+    success "Repo aliases cache regenerated and loaded (${#${(f)$(<"${cache}")}[@]} aliases)"
+  }
+
+  if is_directory "${PROJECTS_BASE_DIR}"; then
+    local repo_alias_cache="${XDG_CACHE_HOME}/repo-aliases.zsh"
+
+    # Regenerate the cache if it is missing or PROJECTS_BASE_DIR has been
+    # modified more recently than the cache (new/removed top-level repo folder).
+    if ! is_file "${repo_alias_cache}" || [[ "${PROJECTS_BASE_DIR}" -nt "${repo_alias_cache}" ]]; then
+      [[ -n "${DEBUG+1}" ]] && debug "Regenerating repo aliases cache (stale or missing)"
+      _generate_repo_aliases >| "${repo_alias_cache}"
+    fi
+
+    # Source the cache — pure-zsh, no subprocesses.
+    load_file_if_exists "${repo_alias_cache}"
+    unset repo_alias_cache
   fi
 fi
 
@@ -86,10 +138,17 @@ fi
 # --------------------------------------------------------------------------
 
 delete_caches() {
-  # delete the zsh compiled files so that they can be recompiled whenever a new terminal session is next started
+  # Delete all *.zwc* compiled zsh bytecode files under HOME and HOMEBREW_PREFIX so
+  # they are recompiled fresh on the next login shell (via .zlogin).  This covers
+  # compiled config files, scripts, autoload functions, and any *.zwc siblings of
+  # the cache files below.
   find "${HOME}" "${HOMEBREW_PREFIX}" \( -path '*/.git/*' -o -path '*/node_modules/*' -o -path '*/.mypy_cache/*' -o -path '*/__pycache__/*' \) -prune -o -maxdepth 6 -name '*.zwc*' -type f -print -delete || warn "find command failed in ${HOME} or ${HOMEBREW_PREFIX}"
 
-  # delete the global cache directory
+  # Delete the entire XDG_CACHE_HOME directory. This removes all generated cache
+  # files (brew-shellenv-cache.zsh, starship-init-cache.zsh, repo-aliases.zsh, zsh
+  # completion dump, fast-syntax-highlighting theme cache, etc.) and their *.zwc
+  # bytecode companions. They are all regenerated automatically on the next shell
+  # start or login shell.
   is_directory "${XDG_CACHE_HOME}" && rm -rfv "${XDG_CACHE_HOME}"
 }
 
@@ -252,7 +311,7 @@ allow_all_direnv_configs() {
     if direnv allow "${dir}"; then
       success "Successfully allowed direnv for '$(yellow "${dir}")'"
     else
-      warn "Failed to allow direnv for '${dir}'"
+      warn "Failed to allow direnv for '$(yellow "${dir}")'"
     fi
   done
   unset sorted_dirs
@@ -339,7 +398,8 @@ fi
 # Added to view the shell startup time (modified from https://blog.jonlu.ca/posts/speeding-up-zsh)
 time_shell_startup() {
   local shell="${1-${SHELL}}"
-  for i in $(seq 1 10); do /usr/bin/time "${shell}" -i -c exit; done
+  # {1..10} brace expansion — no $(seq 1 10) subprocess fork.
+  for i in {1..10}; do /usr/bin/time "${shell}" -i -c exit; done
 }
 
 if command_exists docker; then
@@ -392,8 +452,13 @@ pdf_to_png() {
 
 # Show disk usage of a folder in a colorized format (moved from .shellrc)
 folder_size() {
-  local folder="${1:-$(pwd)}"
-  echo "$(yellow "$(realpath "${folder}")") --> $(cyan "$(/usr/bin/du -sh "${folder}" | cut -f1)")"
+  local folder="${1:-${PWD}}"
+  # du output is "<size>\t<path>"; capture once then strip with %% — no cut fork.
+  # ${folder:A} is the pure-zsh realpath equivalent — no realpath subprocess.
+  # color functions apply tilde substitution automatically; no pre-substitution needed.
+  local du_out
+  du_out=$(/usr/bin/du -sh "${folder}" 2>/dev/null)
+  echo "$(yellow "${folder:A}") --> $(cyan "${du_out%%$'\t'*}")"
 }
 
 # --------------------------------------------------------------------------
@@ -427,7 +492,7 @@ if command_exists tmux; then
 fi
 
 # Editor aliases
-if command_exists "$(extract_first_word "${EDITOR}")"; then
+if command_exists "${EDITOR%% *}"; then
   if is_zsh; then
     # associate file extensions with applications for the 'open' command
     alias -s txt="${EDITOR}"
@@ -435,7 +500,7 @@ if command_exists "$(extract_first_word "${EDITOR}")"; then
   fi
 
   # add a generic alias for editing files and folders
-  alias edit="$(extract_first_word "${EDITOR}")"
+  alias edit="${EDITOR%% *}"
 
   # opens the relevant files and folders (used for laptop provisioning) in a single VSCode session
   alias edit-gist='edit "${DOTFILES_DIR}" "${PERSONAL_BIN_DIR}" "${PERSONAL_CONFIGS_DIR}" "${HOME}"/.gitconfig-* "${HOME}/.gitignore" "${SSH_CONFIGS_DIR}" "${HOME}/.mise.toml" "${PERSONAL_PROFILES_DIR}/.gitignore"'

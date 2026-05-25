@@ -5,7 +5,8 @@
 # git command: count
 
 # Source shell helpers if they aren't already loaded
-type is_shellrc_sourced &>/dev/null || source "${HOME}/.shellrc"
+# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
+(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
 
 # Note: Use a function so that it can accept parameters
 count() {

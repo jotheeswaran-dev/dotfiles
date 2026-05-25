@@ -18,14 +18,16 @@ set -e
 # Error trap cleanup and exit
 _cleanup_and_exit() {
   local message='Installation failed. Check for error messages above.'
-  if type error &>/dev/null; then
+  # (( $+functions[...] )) is a no-subshell zsh builtin check, faster than 'type ... &>/dev/null'
+  if (( $+functions[error] )); then
     error "${message}"
   else
     echo "ERROR: ${message}" >&2
   fi
 
   # Restore cron from the backup taken at the start of main(); CRON_BACKUP_FILE is set there.
-  if type resume_cron &>/dev/null; then
+  # (( $+functions[...] )) is a no-subshell zsh builtin check, faster than 'type ... &>/dev/null'
+  if (( $+functions[resume_cron] )); then
     resume_cron
   elif [[ -s "${CRON_BACKUP_FILE:-}" ]]; then
     # Fallback: shellrc not yet loaded, restore directly
@@ -42,7 +44,12 @@ _cleanup_and_exit() {
 
 # Set DNS to 8.8.8.8 if on Jio ISP (GitHub may otherwise not resolve)
 setup_jio_dns() {
-  if curl -fsS https://ipinfo.io/org | \grep -qi 'jio'; then
+  local _org
+  # Capture curl output into a variable first; then test with a glob match.
+  # Previously: curl ... | grep -qi 'jio' — two processes + pipe.
+  # Now: single curl fork, pure-zsh lowercase expansion (:l) + glob match.
+  _org=$(curl -fsS https://ipinfo.io/org 2>/dev/null)
+  if [[ "${_org:l}" == *jio* ]]; then
     echo '==> Setting DNS for WiFi from Jio ISP'
     networksetup -setdnsservers Wi-Fi 8.8.8.8 || echo 'Warning: Failed to set DNS for Wi-Fi'
   fi
@@ -50,12 +57,13 @@ setup_jio_dns() {
 
 # Download and source .shellrc from GitHub (before dotfiles are cloned)
 download_and_source_shellrc() {
-  echo "==> Download the '${HOME}/.shellrc' for loading the utility functions"
+  echo "==> Download the '~/.shellrc' for loading the utility functions"
   # force the download for FIRST_INSTALL
-  [[ -n "${FIRST_INSTALL}" ]] && type is_shellrc_sourced &>/dev/null && unfunction is_shellrc_sourced
+  # (( $+functions[...] )) is a no-subshell zsh builtin check, faster than 'type ... &>/dev/null'
+  [[ -n "${FIRST_INSTALL}" ]] && (( $+functions[is_shellrc_sourced] )) && unfunction is_shellrc_sourced
 
   # Check for one key function defined in .shellrc to see if sourcing is needed
-  if ! type is_shellrc_sourced &>/dev/null; then
+  if ! (( $+functions[is_shellrc_sourced] )); then
     [[ ! -f "${HOME}/.shellrc" ]] && curl --retry 3 --retry-delay 5 -fsSL "https://raw.githubusercontent.com/${GH_USERNAME}/dotfiles/refs/heads/${DOTFILES_BRANCH}/files/--HOME--/.shellrc" -o "${HOME}/.shellrc"
     DEBUG=true source "${HOME}/.shellrc"
   else
@@ -214,7 +222,7 @@ install_homebrew() {
   if ! command_exists brew; then
     # Prep for installing homebrew
     sudo mkdir -p "${HOMEBREW_PREFIX}/tmp" "${HOMEBREW_PREFIX}/repository" "${HOMEBREW_PREFIX}/plugins" "${HOMEBREW_PREFIX}/bin"
-    sudo chown -fR "$(whoami)":admin "${HOMEBREW_PREFIX}"
+    sudo chown -fR "${USER}":admin "${HOMEBREW_PREFIX}"
     chmod u+w "${HOMEBREW_PREFIX}"
 
     local install_script_file
@@ -256,13 +264,10 @@ install_homebrew() {
   # Note: Each pass includes the Brewfile preamble (non tap/brew/cask lines) to preserve Ruby DSL context (e.g. cask_args, is_arm).
   # Note: For FIRST_INSTALL, only process lines up to the first 'FIRST_INSTALL' guard in the Brewfile (which marks the end of the base install section).
   if is_non_zero_string "${FIRST_INSTALL}"; then
-    local brewfile_content brewfile_preamble
-    brewfile_content="$(sed "/^[^#].*FIRST_INSTALL/q" "${HOMEBREW_BUNDLE_FILE}" | \grep -Ev "^[^#].*FIRST_INSTALL")"
-    brewfile_preamble="$(print "${brewfile_content}" | \grep -Ev "^tap |^brew |^cask ")"
-    if brew bundle check || \
-      (brew bundle --file=- <<< "${brewfile_preamble}"$'\n'"$(print "${brewfile_content}" | \grep -E "^tap ")" && \
-      brew bundle --file=- <<< "${brewfile_preamble}"$'\n'"$(print "${brewfile_content}" | \grep -E "^brew ")" && \
-      brew bundle --file=- <<< "${brewfile_preamble}"$'\n'"$(print "${brewfile_content}" | \grep -E "^cask ")"); then
+    local brewfile_content
+    brewfile_content="$(sed "/^[^#].*FIRST_INSTALL/q" "${HOMEBREW_BUNDLE_FILE}")"
+    brewfile_content="${brewfile_content%$'\n'*FIRST_INSTALL*}"  # strip the FIRST_INSTALL guard line itself
+    if brew bundle check || brew bundle --file=- <<< "${brewfile_content}"; then
       success 'Successfully installed cmd-line and gui apps using homebrew'
     else
       warn 'Homebrew bundle install encountered errors; continuing...'
@@ -340,10 +345,20 @@ main() {
   export ZSH_CUSTOM="${ZSH_CUSTOM:-"${ZSH}/custom"}"
 
   # Note: Cannot load from shellrc since that file won't be present in a new machine (vanilla OS)
+  # $EPOCHSECONDS is provided by the zsh/datetime built-in module — always available, no fork.
+  # Capture start epoch into both a local variable and SCRIPT_START_TIMES.
+  # The local is passed explicitly to print_script_duration at the end of main.
+  # SCRIPT_START_TIMES is used by step_end (called throughout this script) to
+  # compute the "total elapsed" column independently of the local variable.
+  # Both are required; see the design note above step_timing_init in .shellrc.
   local script_start_time
-  script_start_time=$(date +%s)
+  zmodload zsh/datetime
+  script_start_time="${EPOCHSECONDS}"
   SCRIPT_START_TIMES+=("${script_start_time}")
-  echo "Script started at: $(date '+%Y-%m-%d %H:%M:%S')"
+  # strftime -s writes directly into a separate variable — preserves the epoch integer in script_start_time.
+  local script_start_time_human
+  strftime -s script_start_time_human '%Y-%m-%d %H:%M:%S' "${EPOCHSECONDS}"
+  echo "==> Script started at: ${script_start_time_human}"
 
   ###############################
   # Do not allow rootless login #
@@ -447,8 +462,8 @@ main() {
   ################################
   step_start
   section_header "$(yellow 'Recreate zsh completions')"
-  rm -rf "${XDG_CACHE_HOME}/zcompdump-${ZSH_VERSION}"* &>/dev/null  || true
-  autoload -Uz compinit && compinit -C -d "${XDG_CACHE_HOME}/zcompdump-${ZSH_VERSION}" &>/dev/null  || true
+  rm -rf "${XDG_CACHE_HOME}/zcompdump"* &>/dev/null  || true
+  autoload -Uz compinit && compinit -C -d "${XDG_CACHE_HOME}/zcompdump" &>/dev/null  || true
   step_end
 
   ###################
@@ -473,7 +488,8 @@ main() {
   # resurrect_tracked_repos
 
   if command_exists allow_all_direnv_configs; then
-    allow_all_direnv_configs
+    # HACKTAG: Can take a long time on FIRST_INSTALL (same as install_mise_versions). Running in background to be non-blocking
+    allow_all_direnv_configs &!
   else
     warn "Skipping registering all direnv configs since '$(yellow 'allow_all_direnv_configs')' couldn't be found in the PATH; Please run it manually"
   fi

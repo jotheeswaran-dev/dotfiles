@@ -8,7 +8,8 @@
 # Do not exit immediately if a command exits with a non-zero status since this is run within a cronjob
 
 # Since this script is invoked from cron (which uses bash shell), we need to explicitly load all zsh configs (not just shellrc)
-type is_shellrc_sourced &>/dev/null || source "${HOME}/.shellrc"
+# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
+(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
 load_zsh_configs
 
 # Run a single update step if the check command is available
@@ -32,8 +33,14 @@ perform_update() {
 }
 
 main() {
+  # Capture start epoch into both a local variable and SCRIPT_START_TIMES.
+  # The local is passed explicitly to print_script_duration at the end of main.
+  # SCRIPT_START_TIMES is used by step_end (called throughout this script via
+  # perform_update) to compute the "total elapsed" column independently of the
+  # local variable.  Both are required; see the design note above
+  # step_timing_init in .shellrc.
   local script_start_time
-  script_start_time=$(date +%s)
+  script_start_time="${EPOCHSECONDS}"
   SCRIPT_START_TIMES+=("${script_start_time}")
   local model tracked_file f folder
   print_script_start
@@ -136,33 +143,25 @@ main() {
   step_start
   section_header "$(yellow 'Prune old timestamped session backups from browser-profiles repo')"
   if is_git_repo "${PERSONAL_PROFILES_DIR}"; then
-    local cutoff_date cutoff_epoch file_date file_epoch
-    # Use date arithmetic compatible with both macOS (BSD) and Linux (GNU)
-    if date -v-7d +%s &>/dev/null 2>&1; then
-      cutoff_epoch=$(date -v-7d +%s)  # macOS BSD date
-    else
-      cutoff_epoch=$(date -d '7 days ago' +%s)  # GNU date
-    fi
+    local cutoff_date file_date
+    # Compute cutoff date string (7 days ago) using pure zsh arithmetic + strftime.
+    # YYYY-MM-DD strings sort lexicographically, so string comparison is correct.
+    strftime -s cutoff_date '%Y-%m-%d' $(( EPOCHSECONDS - 7 * 24 * 3600 ))
     # Pattern: zen-sessions-backup/zen-sessions-YYYY-MM-DD-HH.jsonlz4
     local -a old_backups=()
     while IFS= read -r tracked_file; do
       # Extract the date portion: YYYY-MM-DD from the filename
-      file_date="${tracked_file:t:r:r}"   # strip dirs, strip .jsonlz4 → zen-sessions-YYYY-MM-DD-HH
-      file_date="${file_date#zen-sessions-}"  # → YYYY-MM-DD-HH
-      file_date="${file_date%%-[0-9][0-9]}"   # → YYYY-MM-DD
-      if date -j -f "%Y-%m-%d" "${file_date}" +%s &>/dev/null 2>&1; then
-        file_epoch=$(date -j -f "%Y-%m-%d" "${file_date}" +%s)  # macOS
-      else
-        file_epoch=$(date -d "${file_date}" +%s 2>/dev/null)     # GNU
-      fi
-      if is_non_zero_string "${file_epoch}" && [[ "${file_epoch}" -lt "${cutoff_epoch}" ]]; then
+      file_date="${tracked_file:t:r:r}"        # strip dirs, strip .jsonlz4 → zen-sessions-YYYY-MM-DD-HH
+      file_date="${file_date#zen-sessions-}"   # → YYYY-MM-DD-HH
+      file_date="${file_date%%-[0-9][0-9]}"    # → YYYY-MM-DD
+      if [[ "${file_date}" < "${cutoff_date}" ]]; then
         old_backups+=("${tracked_file}")
       fi
     done < <(git -C "${PERSONAL_PROFILES_DIR}" ls-files -- '*/zen-sessions-backup/zen-sessions-*.jsonlz4')
 
     if [[ ${#old_backups[@]} -gt 0 ]]; then
       for f in "${old_backups[@]}"; do
-        git -C "${PERSONAL_PROFILES_DIR}" rm --cached --quiet -- "${f}" && debug "Unpinned old session backup: ${f}"
+        git -C "${PERSONAL_PROFILES_DIR}" rm --cached --quiet -- "${f}" && debug "Unpinned old session backup: $(yellow "${f}")"
       done
       success "Pruned ${#old_backups[@]} session backup file(s) older than 7 days"
     else
@@ -170,7 +169,7 @@ main() {
     fi
     unset cutoff_epoch old_backups
   else
-    debug "Skipping session backup pruning — not a git repo: '${PERSONAL_PROFILES_DIR}'"
+    debug "Skipping session backup pruning — not a git repo: '$(yellow "${PERSONAL_PROFILES_DIR}")'"
   fi
   step_end
 
@@ -214,7 +213,10 @@ main() {
   fi
   step_end
 
-  success "Finished software updates at $(purple "$(date)")"
+  # strftime -s writes directly into _now — no $(date) subprocess fork.
+  local _now
+  strftime -s _now '%Y-%m-%d %H:%M:%S' "${EPOCHSECONDS}"
+  success "Finished software updates at $(purple "${_now}")"
   print_script_duration "${script_start_time}"
 }
 

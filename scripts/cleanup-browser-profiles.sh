@@ -10,7 +10,8 @@
 
 # Source shellrc only once if any required function is missing
 # Check for one key function defined in .shellrc to see if sourcing is needed
-type is_shellrc_sourced &>/dev/null || source "${HOME}/.shellrc"
+# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
+(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
 
 vacuum_browser_profile_folder() {
   local browser_name="${1}"   # Passed browser name
@@ -23,10 +24,20 @@ vacuum_browser_profile_folder() {
   local file_patterns_file="${DOTFILES_DIR}/scripts/data/cleanup-browser-files.txt"
   local dir_patterns_file="${DOTFILES_DIR}/scripts/data/cleanup-browser-dirs.txt"
   if is_file "${file_patterns_file}"; then
-    file_patterns=("${(@f)$(grep -vE '^\s*#|^\s*$' "${file_patterns_file}")}")
+    # while+read replaces $("${(@f)$(grep -vE ...)}"): no grep subprocess fork.
+    # =~ regex test skips comment lines; ${_line//[[:space:]]/} blank-line check.
+    local _line
+    while IFS= read -r _line; do
+      [[ "${_line}" =~ '^[[:space:]]*#' || -z "${_line//[[:space:]]/}" ]] && continue
+      file_patterns+=("${_line}")
+    done < "${file_patterns_file}"
   fi
   if is_file "${dir_patterns_file}"; then
-    dir_patterns=("${(@f)$(grep -vE '^\s*#|^\s*$' "${dir_patterns_file}")}")
+    local _line
+    while IFS= read -r _line; do
+      [[ "${_line}" =~ '^[[:space:]]*#' || -z "${_line//[[:space:]]/}" ]] && continue
+      dir_patterns+=("${_line}")
+    done < "${dir_patterns_file}"
   fi
 
   if pgrep -i -f -q "${browser_name}"; then
@@ -41,7 +52,10 @@ vacuum_browser_profile_folder() {
 
   section_header "$(yellow 'Vacuuming') '$(purple "${browser_name}")' in '$(yellow "${profile_folder}")'..."
 
-  local size_before=$(du -sk "${profile_folder}" 2>/dev/null | cut -f1)
+  # du output is "<size>\t<path>"; capture once, strip path with %% — no cut fork.
+  local _du_out size_before
+  _du_out=$(du -sk "${profile_folder}" 2>/dev/null)
+  size_before="${_du_out%%$'\t'*}"
   echo "--> Size before: $(folder_size "${profile_folder}")"
 
   if command_exists sqlite3; then
@@ -55,11 +69,11 @@ vacuum_browser_profile_folder() {
       # Only vacuum if > 10MB to save time
       if [[ ${db_size} -gt 10485760 ]]; then
         if [[ ${dry_run} -eq 1 ]]; then
-          echo "[DRY-RUN] Would vacuum: ${db_file} ($(numfmt --to=iec ${db_size} 2>/dev/null || echo "${db_size} bytes"))"
+          echo "[DRY-RUN] Would vacuum: $(replace_home_with_tilde "${db_file}") ($(numfmt --to=iec ${db_size} 2>/dev/null || echo "${db_size} bytes"))"
         else
-          echo "Vacuuming: ${db_file}"
+          echo "Vacuuming: $(replace_home_with_tilde "${db_file}")"
           if ! sqlite3 "${db_file}" 'PRAGMA journal_mode=WAL; VACUUM; REINDEX;'; then
-            warn "sqlite3 failed for '${db_file}'"
+            warn "sqlite3 failed for '$(yellow "${db_file}")'"
             vacuum_failed=1
           else
             ((vacuumed_count++))
@@ -71,7 +85,7 @@ vacuum_browser_profile_folder() {
     [[ ${show_stats} -eq 1 ]] && echo "  -> Processed ${vacuumed_count} of ${db_count} SQLite databases"
 
     if [[ ${vacuum_failed} -ne 0 ]]; then
-      warn "One or more sqlite vacuum/reindex operations failed in ${profile_folder}"
+      warn "One or more sqlite vacuum/reindex operations failed in '$(yellow "${profile_folder}")'"
       return 1
     fi
   fi
@@ -113,22 +127,26 @@ vacuum_browser_profile_folder() {
   # Add -delete action and execute only if conditions were specified
   if [[ ${has_conditions} -eq 1 ]]; then
     if [[ ${dry_run} -eq 1 ]]; then
+      # Capture find output into an array; ${#_items} replaces `wc -l` subprocess.
+      local -a _items=("${(@f)$("${combined_find_cmd[@]}" -print 2>/dev/null)}")
+      local total_count=${#_items}
       echo '[DRY-RUN] Would delete the following files and directories:'
-      "${combined_find_cmd[@]}" -print | head -20
-      local total_count=$("${combined_find_cmd[@]}" -print | wc -l)
+      print -l "${_items[@]}" | head -20
       [[ ${total_count} -gt 20 ]] && echo "  ... and $((total_count - 20)) more items"
     else
       echo 'Deleting files and directories matching patterns...'
-      local deleted_count=$("${combined_find_cmd[@]}" -print | wc -l)
+      local -a _items=("${(@f)$("${combined_find_cmd[@]}" -print 2>/dev/null)}")
+      local deleted_count=${#_items}
       if ! "${combined_find_cmd[@]}" -delete; then
-        warn "Combined find/delete operation failed (code: $?) in '${profile_folder}'.";
+        warn "Combined find/delete operation failed (code: $?) in '$(yellow "${profile_folder}")'.";
       else
         [[ ${show_stats} -eq 1 ]] && echo "  -> Deleted ${deleted_count} items"
       fi
     fi
   fi
 
-  local size_after=$(du -sk "${profile_folder}" 2>/dev/null | cut -f1)
+  _du_out=$(du -sk "${profile_folder}" 2>/dev/null)
+  local size_after="${_du_out%%$'\t'*}"
   echo "--> Size after: $(folder_size "${profile_folder}")"
 
   if [[ ${show_stats} -eq 1 ]] && [[ ${dry_run} -eq 0 ]]; then
@@ -163,7 +181,12 @@ main() {
 
   [[ ${dry_run} -eq 1 ]] && warn "Running in DRY-RUN mode - no changes will be made"
 
-  local script_start_time=$(date +%s)
+  # script_start_time is passed explicitly to print_script_duration below.
+  # This script does not call step_start/step_end so there is no need to push
+  # onto SCRIPT_START_TIMES.  If step_start/step_end are ever added here,
+  # this local must also be pushed onto SCRIPT_START_TIMES so step_end can
+  # compute total elapsed correctly (see design note in .shellrc).
+  local script_start_time="${EPOCHSECONDS}"
   print_script_start
 
   # Define browsers and their profile folders

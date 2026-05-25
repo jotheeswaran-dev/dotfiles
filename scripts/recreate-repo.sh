@@ -10,7 +10,8 @@
 set -e
 
 # Source shell helpers if they aren't already loaded
-type is_shellrc_sourced &>/dev/null || source "${HOME}/.shellrc"
+# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
+(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
 
 usage() {
   echo "$(red 'Usage'): $(yellow "${${(%):-%x}##*/}") [-f] -d <repo-folder>"
@@ -119,7 +120,7 @@ main() {
 
     rm -f "${folder}/.git/index.lock"
     git -C "${folder}" add -A .
-    git -C "${folder}" commit -qm "Initial commit: $(date)"
+    git -C "${folder}" commit -qm "Initial commit: $(strftime '%Y-%m-%d %H:%M:%S' ${EPOCHSECONDS})"  # strftime — no $(date) fork
   fi
 
   # Retry the commit in case it failed the first time
@@ -135,7 +136,9 @@ main() {
     debug "$(blue 'Recreating') '$(yellow "${git_url}")'"
 
     local git_remote_repo_name
-    git_remote_repo_name="$(extract_last_segment "${git_url}")"
+    # ${${git_url%/}##*/} strips trailing slash then everything up to the last slash —
+    # pure-zsh equivalent of basename, no extract_last_segment subshell call.
+    git_remote_repo_name="${${git_url%\/}##*/}"
     keybase git delete -f "${git_remote_repo_name}" || warn "Failed to delete keybase repo '${git_remote_repo_name}' (it might not exist)"
     keybase git create "${git_remote_repo_name}" || error "Failed to create keybase repo '${git_remote_repo_name}'"
   fi
