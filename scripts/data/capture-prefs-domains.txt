@@ -355,7 +355,6 @@ com.docker.docker
 com.electron.mechvibes
 com.electron.ollama
 com.ethanbills.DockDoor
-com.generalarcade.flycut
 com.github.Electron
 com.github.IngmarStein.Monolingual
 com.google.Chrome
@@ -385,7 +384,6 @@ com.ovatar.batteryapp
 com.parallels.Parallels Desktop
 com.pdfeditor.pdfeditormac
 com.qtproject
-com.raycast.macos
 com.sproutcube.Shortcat
 com.stonerl.Thaw
 com.titanium.OnyX
@@ -423,7 +421,6 @@ org.mozilla.floorp
 org.mozilla.nightly
 org.mozilla.thunderbird
 org.mozilla.thunderbird-daily
-org.p0deje.Maccy
 org.torproject.torbrowser
 org.torproject.torbrowseralpha
 pbs

@@ -5,11 +5,10 @@
 # This script is used to add an app as a macOS login item if not already present.
 
 # Exit immediately if a command exits with a non-zero status.
-set -e
+set -euo pipefail
 
-# Source helpers only once if any required function is missing
-# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
-(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
+# Re-source guard is inside .shellrc itself — safe to call unconditionally.
+source "${HOME}/.shellrc"
 
 usage() {
   echo "$(red 'Usage'): $(yellow "${${(%):-%x}##*/}") -a <app-name>"
@@ -18,7 +17,7 @@ usage() {
 }
 
 main() {
-  local app_name
+  local app_name=''
   while getopts ":a:" opt; do
     case ${opt} in
       a)

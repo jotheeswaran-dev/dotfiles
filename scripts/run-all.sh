@@ -7,14 +7,13 @@
 # Exit immediately if a command exits with a non-zero status.
 set -euo pipefail
 
-# Source shell helpers if they aren't already loaded
-# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
-(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
+# Re-source guard is inside .shellrc itself — safe to call unconditionally.
+source "${HOME}/.shellrc"
 
 usage() {
   cat <<EOF
   $(red 'Usage'): $(yellow "${${(%):-%x}##*/}") <any-unix-command>
-This script will find all git repositories within the specified 'FOLDER' (defaults to current dir) filtered by 'FILTER' (defaults to empty string; accepts regex) and for a minimum depth of 'MINDEPTH' (optional; defaults to 1) and a maximum depth of 'MAXDEPTH' (optional; defaults to 3); and then runs the specified commands in each of those git repos. This script is not limited to only running 'git' commands!
+This script will find all git repositories within the specified 'FOLDER' (defaults to current dir) filtered by 'FILTER' (defaults to empty string; accepts regex) and for a minimum depth of 'MINDEPTH' (optional; defaults to 1) and a maximum depth of 'MAXDEPTH' (optional; defaults to 4); and then runs the specified commands in each of those git repos. This script is not limited to only running 'git' commands!
 
 For eg:
 FOLDER=dev MINDEPTH=2 $(yellow "${${(%):-%x}##*/}") git status
@@ -70,7 +69,7 @@ main() {
   while IFS= read -r git_dir; do
     local d="${git_dir:h}"
     [[ -n "${filter}" && ! "${d}" =~ ${filter} ]] && continue
-    if [[ -z "${_seen[${d}]}" ]]; then
+    if (( ! ${+_seen[${d}]} )); then
       _seen[${d}]=1
       dir_array+=("${d}")
     fi

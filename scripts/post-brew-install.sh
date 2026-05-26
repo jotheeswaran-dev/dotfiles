@@ -5,11 +5,10 @@
 # This script is used to run some commands at the end of the 'brew bundle' command. They are not inlined into the Brewfile due to the need to escape quoted strings. Ideally, the brew bundle DSL should allow such symlinking as each cask is installed (and do the reverse when the cask is uninstalled), but that idea's was rejected by the maintainers.
 
 # Exit immediately if a command exits with a non-zero status.
-set -e
+set -euo pipefail
 
-# Source helpers only once if any required function is missing
-# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
-(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
+# Re-source guard is inside .shellrc itself — safe to call unconditionally.
+source "${HOME}/.shellrc"
 
 # Print an info banner about which program is being linked
 print_link_info() {
@@ -62,7 +61,7 @@ elif is_directory '/Applications/Visual Studio Code.app'; then
   # Symlink from the embedded executable for code
   replace_symlink_if_needed '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code' "${HOMEBREW_PREFIX}/bin/code"
 else
-  warn 'skipping symlinking vscode/vscodium for command-line invocation'
+  warn 'Skipping symlinking VSCode/VSCodium for command-line invocation'
 fi
 
 print_link_info 'rider'

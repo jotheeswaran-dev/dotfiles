@@ -12,24 +12,6 @@ This script is useful to capture the preferences of the known applications (both
 
 The whitelist of preference domains to capture is maintained in [`scripts/data/capture-prefs-domains.txt`](scripts/data/capture-prefs-domains.txt).
 
-## capture-raycast-configs.sh
-
-This script is useful to capture the raycast preferences/configurations. It can be used to both export the preferences/settings (from the old system) or import them (into the new system)
-
-  ```bash
-  export RAYCAST_SETTINGS_PASSWORD='my-password'
-  capture-raycast-configs.sh -e "${PERSONAL_PROFILES_DIR}/extension-backups"
-  capture-raycast-configs.sh -i "${PERSONAL_PROFILES_DIR}/extension-backups"
-  ```
-
-*Please note:*
-
-Since this script uses applescript internally, it needs to be granted the following permissions:
-
-* `Privacy & Security > Accessibility` - need to enable/approve for your preferred terminal emulator apps.
-* Also, since this mimics keystrokes from the user, while this script is running, you should not move the mouse or type anything else using the keyboard or mouse.
-* The above manual steps have to be performed after installing Raycast and running it at least once (so one has to click through the setup wizard). Due to this reason, this script has NOT been incorporated into the `fresh-install-of-osx.sh` script.
-
 ## cleanup-browser-profiles.sh
 
 This script is used to cleanup browser profiles folders (delete cache, session and other files that will anyways be recreated when you restart that browser). It can be safely invoked even if that browser is running (in which case it will skip processing after printing a warning to quit that application).
@@ -41,12 +23,12 @@ The lists of files and directories to clean are maintained in [`scripts/data/cle
 This is the main setup script for a fresh macOS installation. It is idempotent and can be run multiple times safely. The script:
 
 * Detects Intel vs Apple Silicon architecture automatically
-* Installs Homebrew, Oh My Zsh, and Starship prompt
+* Installs Homebrew, antidote (zsh plugin manager), and Starship prompt
 * Sets up the dotfiles repo and symlinks all config files
 * Installs essential CLI tools and GUI applications via the Brewfile
 * Configures macOS system defaults
 * Sets up SSH keys and permissions
-* Resurrects tracked git repositories
+* Resurrects tracked git repositories *(skipped by default — `resurrect_tracked_repos` is commented out; must be run manually)*
 * Installs programming language versions via mise
 * Restores application preferences from backups
 * Configures cron jobs for ongoing maintenance
@@ -130,7 +112,7 @@ This script will find all git repositories within the specified `FOLDER` (defaul
 You can also control the starting folder by specifying the `FOLDER` env var, the filter for matching either the path and/or the name of the folders to be processed using `FILTER` (including using regular expressions for the same!) and also simultaneously control the depth using the `MINDEPTH` and `MAXDEPTH` env vars. So, for eg, to search in multiple nested folders starting at `~/dev`, you can use the following command:
 
 ```bash
-  FOLDER=~/dev MINDEPTH=2 MAXDEPTH=5 FILTER="oss|zsh|omz" run-all.sh git status
+  FOLDER=~/dev MINDEPTH=2 MAXDEPTH=5 FILTER="oss|zsh|antidote" run-all.sh git status
   FOLDER=~/dev MINDEPTH=2 MAXDEPTH=5 run-all.sh git fetch
 ```
 

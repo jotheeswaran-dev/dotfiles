@@ -16,8 +16,8 @@
 # execute 'DEBUG=true zsh' to debug the load order of the custom zsh configuration files
 [[ -n "${DEBUG+1}" ]] && echo "loading ${0}"
 
-# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
-(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
+# Re-source guard is inside .shellrc itself — safe to call unconditionally.
+source "${HOME}/.shellrc"
 
 recompile_zsh_scripts() {
   if is_non_empty_file "${1}" && (! is_file "${1}.zwc" || [[ "${1}" -nt "${1}.zwc" ]]); then

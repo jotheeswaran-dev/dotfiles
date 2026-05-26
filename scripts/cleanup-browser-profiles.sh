@@ -4,20 +4,23 @@
 
 # This script is used to cleanup browser profiles folders (delete cache, session and other files that will anyways be recreated when you restart that browser). It can be safely invoked even if that browser is running (in which case it will skip processing after printing a warning to quit that application)
 
-# Exit immediately if a command exits with a non-zero status.
-# TODO: Disabled since this script errors out
-# set -e
+# set -euo pipefail is intentionally omitted: some cleanup steps (find, rm on
+# missing files) return non-zero in normal operation and must not abort the script.
 
-# Source shellrc only once if any required function is missing
-# Check for one key function defined in .shellrc to see if sourcing is needed
-# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
-(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
+# Re-source guard is inside .aliases itself — safe to call unconditionally.
+# Sourcing .aliases also brings in .shellrc (which .aliases sources internally).
+source "${HOME}/.aliases"
 
+# Vacuums SQLite databases larger than 10 MB and deletes known cache/session files from a
+# browser's profile folder. Skips processing if the browser process is running. Supports
+# dry-run mode (pass 1 as the third argument) and optional statistics output (pass 1 as the
+# fourth argument).
+# Usage: vacuum_browser_profile_folder <browser-name> <profile-folder> <dry-run> <show-stats>
 vacuum_browser_profile_folder() {
   local browser_name="${1}"   # Passed browser name
   local profile_folder="${2}" # Profile folder path
-  local dry_run="${3}"        # Dry-run flag (1 = dry-run)
-  local show_stats="${4}"     # Show statistics flag (1 = show stats)
+  local dry_run="${3:-0}"        # Dry-run flag (1 = dry-run)
+  local show_stats="${4:-0}"     # Show statistics flag (1 = show stats)
 
   # Read pattern files from DOTFILES_DIR
   local -a file_patterns dir_patterns

@@ -24,7 +24,7 @@ All of the folder structures and the setup/backup operations are governed by the
 ## 🛠️ Essential Development Tools
 
 - **Homebrew** — Package manager
-- **Modern CLI and GUI tools** — See the full list in the [Brewfile](files/--HOME/Brewfile)
+- **Modern CLI and GUI tools** — See the full list in the [Brewfile](files/--HOME--/Brewfile)
 
 ## 🐚 Shell Configuration
 
@@ -58,7 +58,7 @@ In your forked repo, make the following changes, commit and push _via the Github
       ```bash
       latest_head="$(git -C "${DOTFILES_DIR}" rev-parse HEAD)"
       git -C "${DOTFILES_DIR}" reset --hard upstream/master
-      git -C "${DOTFILES_DIR}" cherrypick ${latest_head}
+      git -C "${DOTFILES_DIR}" cherry-pick ${latest_head}
       # TODO: manually fix any conflicts
       ```
 
@@ -93,7 +93,7 @@ If you want to automate the repetitive running of these scripts/commands, you ca
 
 The softwares in the `files/--HOME--/Brewfile` will be run only with the bare minimum of formulae with the above invocation. Once the process completes, and you restart the Terminal app, you would want to run `bupc` so that all the other applications can be installed.
 
-Once the above is done, and if you have setup the [keybase](https://keybase.io)-based home repo, browser profiles repo, etc - you can then re-import your exported preferences from the [pre-requisites section](#pre-requisite-if-you-want-to-capture-data-from-your-current-mac).
+Once the above is done, and if you have setup the [keybase](https://keybase.io)-based home repo, browser profiles repo, etc - you can then re-import your exported preferences from the [pre-requisites section](#-pre-requisites).
 
 Of course, you will have to manually take snapshots of your machine for backup from time-to-time as an _ongoing activity_. This can be done using the `scripts/capture-prefs.sh` script and pushing into the remote repo of your home folder. (More details can be found in the next section.)
 

@@ -9,18 +9,39 @@
 # load order: .zshenv [.shellrc], .zshrc [.shellrc, .aliases [.shellrc]], .zlogin
 ################################################################################
 
+# Guard against re-sourcing — all call sites can unconditionally 'source ~/.aliases'
+# without needing their own check. This return is a no-op cost (single builtin).
+# ZSH_VERSION guard ensures the zsh-only '(( $+functions[...] ))' syntax is never
+# evaluated by non-zsh runtimes (e.g. direnv's sandbox).
+[[ -n "${ZSH_VERSION-}" ]] && (( $+functions[is_aliases_sourced] )) && return
+
 # execute 'DEBUG=true zsh' to debug the load order of the custom zsh configuration files
 [[ -n "${DEBUG+1}" ]] && echo "loading ${0}"
 
-# DUPLICATE! Copied over since we get an error if the .shellrc was not loaded
-# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
-(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
+# Re-source guard is inside .shellrc itself — safe to call unconditionally.
+source "${HOME}/.shellrc"
 
-# ==============================================================================
+# Dummy function to check if .aliases is sourced (mirrors is_shellrc_sourced in .shellrc)
+is_aliases_sourced() {
+  return 0
+}
+
+# --------------------------------------------------------------------------
+# String utilities (zsh-only; not needed in direnv/bash so lives here not .shellrc)
+# --------------------------------------------------------------------------
+
+# Returns the last path segment of $1, stripping any trailing slash.
+# Uses pure-zsh nested expansion — safe here since .aliases is never sourced by bash.
+# Usage: extract_last_segment <path>
+extract_last_segment() {
+  echo "${${1%/}##*/}"
+}
+
+# --------------------------------------------------------------------------
 # GROUP 3: Ongoing Daily-Use Aliases & Functions
 # Loaded after .shellrc via .zshrc. These are convenience wrappers, maintenance
 # tools, and project-specific helpers used during interactive shell sessions.
-# ==============================================================================
+# --------------------------------------------------------------------------
 
 # --------------------------------------------------------------------------
 # 3a. Shell defaults — extended flags on built-in commands
@@ -50,7 +71,8 @@ command_exists ncdu && alias du='ncdu --color dark -r -x --exclude .git --exclud
 if command_exists 'run-all.sh'; then
   # shortcuts to handle multiple git repos
   alias rug='run-all.sh git'
-  alias all="FOLDER='${HOME}' MAXDEPTH=6 rug"
+  alias all="FOLDER='${HOME}' MAXDEPTH=7 rug"
+  alias all-cache="FILTER='[cC]ache' all"
   alias home="FOLDER='${HOME}' FILTER='.bin|.dotfiles|zsh|mise' MAXDEPTH=5 rug"
   is_directory "${PERSONAL_PROFILES_DIR}" && alias profiles="FOLDER='${PERSONAL_PROFILES_DIR}' MAXDEPTH=5 rug"
 
@@ -137,6 +159,9 @@ fi
 # 3d. Cache & cleanup
 # --------------------------------------------------------------------------
 
+# Deletes all compiled zsh bytecode (*.zwc*) files under HOME and HOMEBREW_PREFIX, and
+# removes the entire XDG_CACHE_HOME directory. All generated files are recreated
+# automatically on the next shell start or login shell.
 delete_caches() {
   # Delete all *.zwc* compiled zsh bytecode files under HOME and HOMEBREW_PREFIX so
   # they are recompiled fresh on the next login shell (via .zlogin).  This covers
@@ -156,6 +181,9 @@ delete_caches() {
 # 3e. Repo management & environment setup
 # --------------------------------------------------------------------------
 
+# Clones all repositories listed in repositories-*.yml catalogue files under
+# PERSONAL_CONFIGS_DIR, then runs post-clone operations (restore-mtime, git
+# maintenance register/start, allow_all_direnv_configs, install_mise_versions).
 resurrect_tracked_repos() {
   if is_non_zero_string "${PERSONAL_CONFIGS_DIR}"; then
     # TODO: Add the github.com host to the known_hosts file so that the script is not blocked for user input
@@ -184,6 +212,33 @@ resurrect_tracked_repos() {
   install_mise_versions
 }
 
+# Populates the caller-declared 'all_dirs' array with deduplicated ancestor
+# directories of every git repo found under HOME, DOTFILES_DIR, and
+# PROJECTS_BASE_DIR.  Callers must declare 'local -a all_dirs' before calling.
+# Respects FIRST_INSTALL (caps search depth to 3 to speed up vanilla-OS runs).
+_collect_repo_ancestor_dirs() {
+  local find_maxdepth=6
+  is_non_zero_string "${FIRST_INSTALL}" && find_maxdepth=3
+
+  local -A _seen_dirs=()
+  all_dirs=()
+
+  while IFS= read -r git_dir; do
+    local dir="${git_dir:h}"  # strip the trailing /.git to get the repo root
+    while [[ "${dir}" != "/" ]]; do
+      if is_zero_string "${_seen_dirs[$dir]}"; then
+        _seen_dirs[$dir]=1
+        all_dirs+=("${dir}")
+      fi
+      [[ "${dir}" == "${HOME}" ]] && break  # stop after processing HOME
+      dir="${dir:h}"  # walk up one level
+    done
+  done < <(find "${HOME}" "${DOTFILES_DIR}" "${PROJECTS_BASE_DIR}" -maxdepth ${find_maxdepth} \( -name 'node_modules' -o -name '.cache' -o -name '.Trash' -o -name 'Library' -o -name 'Caches' \) -prune -o -type d -name '.git' -print 2>/dev/null)
+}
+
+# Installs any missing tool versions declared via mise config files (.mise.toml,
+# .tool-versions, etc.) across all git repos and their ancestor directories under
+# HOME, DOTFILES_DIR, and PROJECTS_BASE_DIR. Skips silently if mise is not in PATH.
 install_mise_versions() {
   section_header2 "$(yellow 'Installing mise in all git repos and ancestors')"
   if ! command_exists mise; then
@@ -191,23 +246,8 @@ install_mise_versions() {
     return 0
   fi
 
-  local -A seen_dirs
   local -a all_dirs
-  local find_maxdepth=6
-  is_non_zero_string "${FIRST_INSTALL}" && find_maxdepth=3
-
-  # Find all git repos under HOME, collect them and every ancestor (including HOME itself)
-  while IFS= read -r git_dir; do
-    local dir="${git_dir:h}"  # strip the trailing /.git to get the repo root
-    while [[ "${dir}" != "/" ]]; do
-      if is_zero_string "${seen_dirs[$dir]}"; then
-        seen_dirs[$dir]=1
-        all_dirs+=("${dir}")
-      fi
-      [[ "${dir}" == "${HOME}" ]] && break  # stop after processing HOME
-      dir="${dir:h}"  # walk up one level
-    done
-  done < <(find "${HOME}" "${DOTFILES_DIR}" "${PROJECTS_BASE_DIR}" -maxdepth ${find_maxdepth} \( -name 'node_modules' -o -name '.cache' -o -name '.Trash' -o -name 'Library' -o -name 'Caches' \) -prune -o -type d -name '.git' -print 2>/dev/null)
+  _collect_repo_ancestor_dirs
 
   # Sort by depth so parents come before children, then filter to dirs with mise configs
   local mise_configs=('.mise.toml' '.tool-versions' '.ruby-version' '.python-version' '.node-version' '.java-version' '.nvmrc')
@@ -235,7 +275,7 @@ install_mise_versions() {
 
   if ${all_installed}; then
     success 'All mise tools are already installed'
-    unset sorted_dirs all_dirs seen_dirs
+    unset sorted_dirs all_dirs
     return
   fi
 
@@ -249,9 +289,11 @@ install_mise_versions() {
   done
   unset sorted_dirs
   unset all_dirs
-  unset seen_dirs
 }
 
+# Runs 'direnv allow' for every directory that has an .envrc file across all
+# git repos and their ancestor directories under HOME, DOTFILES_DIR, and
+# PROJECTS_BASE_DIR. Skips silently if direnv is not in PATH.
 allow_all_direnv_configs() {
   section_header2 "$(yellow 'Allowing direnv configs in all git repos and ancestors')"
   if ! command_exists direnv; then
@@ -259,23 +301,8 @@ allow_all_direnv_configs() {
     return 0
   fi
 
-  local -A seen_dirs
   local -a all_dirs
-  local find_maxdepth=6
-  is_non_zero_string "${FIRST_INSTALL}" && find_maxdepth=3
-
-  # Find all git repos under HOME, collect them and every ancestor (including HOME itself)
-  while IFS= read -r git_dir; do
-    local dir="${git_dir:h}"  # strip the trailing /.git to get the repo root
-    while [[ "${dir}" != "/" ]]; do
-      if is_zero_string "${seen_dirs[$dir]}"; then
-        seen_dirs[$dir]=1
-        all_dirs+=("${dir}")
-      fi
-      [[ "${dir}" == "${HOME}" ]] && break  # stop after processing HOME
-      dir="${dir:h}"  # walk up one level
-    done
-  done < <(find "${HOME}" "${DOTFILES_DIR}" "${PROJECTS_BASE_DIR}" -maxdepth ${find_maxdepth} \( -name 'node_modules' -o -name '.cache' -o -name '.Trash' -o -name 'Library' -o -name 'Caches' \) -prune -o -type d -name '.git' -print 2>/dev/null)
+  _collect_repo_ancestor_dirs
 
   # Sort by depth so parents come before children, then filter to dirs with .envrc configs
   local -a sorted_dirs
@@ -301,7 +328,7 @@ allow_all_direnv_configs() {
 
   if ${all_allowed}; then
     success 'All direnv configs are already allowed'
-    unset sorted_dirs all_dirs seen_dirs
+    unset sorted_dirs all_dirs
     return
   fi
 
@@ -316,14 +343,16 @@ allow_all_direnv_configs() {
   done
   unset sorted_dirs
   unset all_dirs
-  unset seen_dirs
 }
 
 # --------------------------------------------------------------------------
 # 3f. macOS-specific utilities
 # --------------------------------------------------------------------------
 
-# generate mac addr to escape some free wifi mac addr restrictions
+# Spoofs the MAC address of the given network interface to a random value, which can
+# bypass MAC-address-based session limits on captive-portal (free) Wi-Fi networks.
+# Prints the old and new MAC address for confirmation.
+# Usage: _free_wifi <interface>  (called via the free_wifi alias, e.g. free_wifi en0)
 _free_wifi() {
   local interface="${1}"
   (ifconfig "${interface}" | \grep ether) && \
@@ -354,7 +383,8 @@ if is_macos; then
   alias show_desktop='defaults write com.apple.finder CreateDesktop -bool true && killall Finder'
 
   # Finds and appends the preferences associated with the partial string passed in as an argument.
-  # Also, sorts (and removes duplicates) from the config file used to capture preferences
+  # Also, sorts (and removes duplicates) from the config file used to capture preferences.
+  # Usage: find_and_append_prefs <search-string>
   find_and_append_prefs() {
     local file_name="${DOTFILES_DIR}/scripts/data/capture-prefs-domains.txt"
     defaults find "${1}" | \grep 'keys in domain' | cut -d"'" -f2 >> "${file_name}"
@@ -374,7 +404,8 @@ if is_macos && command_exists brew; then
   alias bcug='brew upgrade --greedy'
   alias bupc='brew bundle check || brew bundle --cleanup || true; brew bundle cleanup -f || true; brew cleanup --prune=all || true; brew autoremove || true; brew upgrade || true; post-brew-install.sh || true'
 
-  # brew cask contribution
+  # Audits and auto-styles a Homebrew cask formula for contribution readiness.
+  # Usage: check_cask <cask-name>
   check_cask() {
     # shasum -a 256 <fileName>
     # cd $(brew --repository homebrew/cask-versions) &&
@@ -383,7 +414,8 @@ if is_macos && command_exists brew; then
     # brew fetch --cask "${1}"
   }
 
-  # brew contribution
+  # Builds a Homebrew formula from source, tests it, and audits it for contribution readiness.
+  # Usage: check_formula <formula-name>
   check_formula() {
     brew install --build-from-source "${1}"
     brew test "${1}"
@@ -395,7 +427,9 @@ fi
 # 3h. Diagnostic & utility functions
 # --------------------------------------------------------------------------
 
-# Added to view the shell startup time (modified from https://blog.jonlu.ca/posts/speeding-up-zsh)
+# Benchmarks shell startup by launching ${SHELL} 10 times and printing timing for each.
+# Reference: https://blog.jonlu.ca/posts/speeding-up-zsh
+# Usage: time_shell_startup [shell-path]  (defaults to $SHELL)
 time_shell_startup() {
   local shell="${1-${SHELL}}"
   # {1..10} brace expansion — no $(seq 1 10) subprocess fork.
@@ -432,7 +466,8 @@ EOF
   }
 fi
 
-# convert from pdf to png without losing quality
+# Converts a PDF file to a PNG image at maximum quality using ImageMagick.
+# Usage: pdf_to_png <pdf-file>
 pdf_to_png() {
   if [[ $# -ne 1 ]]; then
     warn "Usage: ${0} <pdf_file>"
@@ -450,7 +485,8 @@ pdf_to_png() {
   magick -density 800 "${pdf}" -quality 100 "${png}"
 }
 
-# Show disk usage of a folder in a colorized format (moved from .shellrc)
+# Shows disk usage of a folder in a colorized format. Defaults to the current directory.
+# Usage: folder_size [folder-path]
 folder_size() {
   local folder="${1:-${PWD}}"
   # du output is "<size>\t<path>"; capture once then strip with %% — no cut fork.
@@ -520,7 +556,9 @@ fi
 # sourced, well before the dotfiles repo exists.  See section 1g in .shellrc.
 # --------------------------------------------------------------------------
 
-# internal function - not to be called from outside
+# Internal: writes a fresh crontab.txt to $1 with the standard env header and
+# the software-updates-cron.sh schedule. Called only by recron.
+# Usage: _create_crontab <output-file-path>
 _create_crontab() {
   debug 'Creating crontab.txt'
   local file="${1}"
@@ -547,11 +585,28 @@ recron() {
   success 'Crontab set up successfully'
 }
 
+# Wraps a function call in the cron bracket: suspend cron, run the function,
+# call recron to restore it, then clear the backup so the EXIT trap is a no-op.
+#
+# Usage: with_cron_suspended <fn> "$@"
+#
+# Example: with_cron_suspended _push "$@"
+with_cron_suspended() {
+  local fn="${1}"; shift
+  trap 'resume_cron' EXIT
+  suspend_cron
+  "${fn}" "$@"
+  recron
+  rm -f "${CRON_BACKUP_FILE}"
+}
+
 # --------------------------------------------------------------------------
-# 3k. Keybase git gc
+# 3k. Keybase helpers
 # --------------------------------------------------------------------------
 
-# runs git gc on the keybase remote repos (not sure if this actually compresses the remote repo or not)
+# Runs 'keybase git gc --force' on the named repo. Whether this actually
+# reclaims space on the remote is unverified — use as a best-effort compaction step.
+# Usage: kbgc <repo-name>
 if command_exists keybase; then
   kbgc() {
     if [ $# -ne 1 ]; then
@@ -586,15 +641,17 @@ implode() {
 # 3m. Project-specific helpers
 # --------------------------------------------------------------------------
 
-# common build, debug and launch aliases for any folder - converted to functions for lazy evaluation
-# these will use the current folder name to find the shell script to run
+# Convenience wrappers that invoke the per-project script in PERSONAL_BIN_DIR
+# corresponding to the current directory name, e.g. 'launch-ferdium.sh'.
 launch_me() {
   "${PERSONAL_BIN_DIR}/launch-${PWD##*/}.sh"
 }
 debug_me() {
+  # Runs the per-project debug script in PERSONAL_BIN_DIR for the current directory.
   "${PERSONAL_BIN_DIR}/debug-${PWD##*/}.sh"
 }
 build_me() {
+  # Runs the per-project build script in PERSONAL_BIN_DIR for the current directory.
   "${PERSONAL_BIN_DIR}/build-${PWD##*/}.sh"
 }
 

@@ -20,7 +20,8 @@
 # execute 'DEBUG=true zsh' to debug the load order of the custom zsh configuration files
 [[ -n "${DEBUG+1}" ]] && echo "loading ${0}"
 
-# Load the .shellrc here - just to define some env vars that we need before zsh lifecycle kicks in
+# Load the .shellrc here - just to define some env vars that we need before zsh lifecycle kicks in.
+# Re-source guard is inside .shellrc itself — safe to call unconditionally.
 source "${HOME}/.shellrc"
 
 skip_global_compinit=1

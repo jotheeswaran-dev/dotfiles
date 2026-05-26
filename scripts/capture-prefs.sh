@@ -11,11 +11,10 @@
 # Explanation: This runs the `defaults find` command and searches for any match, then it traces back to the left-most child (1st of the top-level parent) in the printed JSON to then get the real unique name of the app where its settings are stored and adds it to the file mentioned above.
 
 # Exit immediately if a command exits with a non-zero status.
-set -e
+set -euo pipefail
 
-# Check for one key function defined in .shellrc to see if sourcing is needed
-# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
-(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
+# Re-source guard is inside .shellrc itself — safe to call unconditionally.
+source "${HOME}/.shellrc"
 
 usage() {
   echo "$(red 'Usage'): $(yellow "${${(%):-%x}##*/}") [-e|-i]"
@@ -25,7 +24,7 @@ usage() {
 }
 
 main() {
-  local operation
+  local operation=''
   while getopts ":ei" opt; do
     case ${opt} in
       e)

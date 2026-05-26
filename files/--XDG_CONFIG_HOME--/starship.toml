@@ -289,15 +289,15 @@ style = "fg:yellow"
 command = """
 root=$(git rev-parse --git-dir 2>/dev/null) || exit 1
 if [ -d "$root/rebase-merge" ] || [ -d "$root/rebase-apply" ]; then
-  printf ' REBASING '
+  printf '>> REBASING <<'
 elif [ -f "$root/MERGE_HEAD" ]; then
-  printf ' MERGING '
+  printf '>> MERGING <<'
 elif [ -f "$root/CHERRY_PICK_HEAD" ]; then
-  printf ' CHERRY-PICKING '
+  printf '>> CHERRY-PICKING <<'
 elif [ -f "$root/REVERT_HEAD" ]; then
-  printf ' REVERTING '
+  printf '>> REVERTING <<'
 elif [ -f "$root/BISECT_LOG" ]; then
-  printf ' BISECTING '
+  printf '>> BISECTING <<'
 else
   exit 1
 fi

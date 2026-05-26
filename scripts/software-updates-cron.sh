@@ -7,9 +7,10 @@
 
 # Do not exit immediately if a command exits with a non-zero status since this is run within a cronjob
 
-# Since this script is invoked from cron (which uses bash shell), we need to explicitly load all zsh configs (not just shellrc)
-# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
-(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
+# Re-source guard is inside .shellrc itself — safe to call unconditionally.
+source "${HOME}/.shellrc"
+# This script is invoked from cron, which starts a minimal bash environment.
+# load_zsh_configs must be called explicitly to bring all zsh configs into scope.
 load_zsh_configs
 
 # Run a single update step if the check command is available
@@ -56,7 +57,7 @@ main() {
   # 'ignore-io' updates the data from http://gitignore.io so that we can generate the '.gitignore' file contents from the cmd-line
   perform_update 'git-ignore database' 'git-ignore-io' 'git ignore-io --update-list'
 
-  # update antidote plugins and regenerate the static bundle
+  # Update antidote plugins and regenerate the static bundle
   step_start
   section_header "$(yellow 'Updating') $(purple 'antidote plugins') and regenerating plugin bundle"
   update_antidote_and_regenerate_plugin_bundle
@@ -165,7 +166,7 @@ main() {
 
     if [[ ${#old_backups[@]} -gt 0 ]]; then
       for f in "${old_backups[@]}"; do
-        git -C "${PERSONAL_PROFILES_DIR}" rm --cached --quiet -- "${f}" && debug "Unpinned old session backup: $(yellow "${f}")"
+        git -C "${PERSONAL_PROFILES_DIR}" rm --cached -q -- "${f}" && debug "Unpinned old session backup: $(yellow "${f}")"
       done
       success "Pruned ${#old_backups[@]} session backup file(s) older than 7 days"
     else

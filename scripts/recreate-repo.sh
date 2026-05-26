@@ -7,11 +7,11 @@
 # It will force removal of history if the `-f` flag is given. (The history of the profiles repo will always get deleted).
 
 # Exit immediately if a command exits with a non-zero status.
-set -e
+set -euo pipefail
 
-# Source shell helpers if they aren't already loaded
-# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
-(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
+# Re-source guard is inside .aliases itself — safe to call unconditionally.
+# Sourcing .aliases also brings in .shellrc (which .aliases sources internally).
+source "${HOME}/.aliases"
 
 usage() {
   echo "$(red 'Usage'): $(yellow "${${(%):-%x}##*/}") [-f] -d <repo-folder>"
@@ -38,7 +38,7 @@ _cleanup_recreate() {
 
 main() {
   local force=N
-  local folder
+  local folder=''
   while getopts ":fd:" opt; do
     case ${opt} in
       f)
@@ -92,20 +92,11 @@ main() {
   info "$(yellow 'User name'): '$(cyan "${git_user_name}")'"
   info "$(yellow 'User email'): '$(cyan "${git_user_email}")'"
 
-  # Before deleting the current git information, ensure that keybase is installed and logged in (if the remote url is a keybase url). This is to avoid a scenario where we delete the git history and then fail to push to the remote due to authentication issues.
+  # Before deleting the current git information, ensure that keybase is installed and logged
+  # in (if the remote url is a keybase url). This avoids a scenario where we delete the git
+  # history and then fail to push to the remote due to authentication issues.
   if [[ "${git_url}" =~ 'keybase' ]]; then
-    if ! command_exists keybase; then
-      error "'keybase' command not found in the PATH. Aborting!!!"
-      exit 1 # Irrecoverable failure
-    fi
-
-    debug "$(yellow 'Logging into keybase')"
-    if keybase status --json 2>/dev/null | \grep -q '"logged_in":true'; then
-      warn "Skipping keybase login since '$(yellow "${KEYBASE_USERNAME}")' is already logged in"
-    elif ! keybase login; then
-      error 'Could not login into keybase. Retry after logging in.'
-      exit 1 # Irrecoverable failure
-    fi
+    ensure_keybase_logged_in || exit 1
   fi
 
   git -C "${folder}" size || true

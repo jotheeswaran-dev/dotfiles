@@ -5,8 +5,8 @@
 # git command: upreb
 
 # Source shell helpers if they aren't already loaded
-# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
-(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
+# Re-source guard is inside .shellrc itself — safe to call unconditionally.
+source "${HOME}/.shellrc"
 
 # Note: Use a function so that it can accept parameters
 # This function is used to run the `git upreb` command for all the locally checked-out branches of the specified folder. If no folder is specified, the function defaults to using the current directory.
@@ -35,13 +35,7 @@ _upreb() {
   unset current_branch
 }
 
-upreb() {
-  if is_executable "${PERSONAL_BIN_DIR}/upreb-${PWD##*/}.sh"; then
-    . "${PERSONAL_BIN_DIR}/upreb-${PWD##*/}.sh" "$@"
-  else
-    _upreb "$@"
-  fi
-}
+upreb() { dispatch_or_fallback upreb _upreb "$@"; }
 
 upreb "$@"
 compdef upreb

@@ -89,9 +89,10 @@
   ll = log --decorate --graph --oneline --abbrev-commit
 
   # Merges a branch without auto-committing (lets you inspect/edit before committing).
+  # --no-ff is required since merge.ff=only is set globally.
   # Usage: git mn <branch>
   # Example: git mn feature/foo
-  mn = merge --no-commit
+  mn = merge --no-commit --no-ff
 
   # Cherry-picks a commit without auto-committing.
   # Usage: git cn <commit>
@@ -201,6 +202,16 @@
   # Usage: git fo
   fo = !git fetch --all --tags && git dlb
 
+  # Pulls all remotes; if the repo is shallow, unshallows it first. Accepts extra git-pull flags.
+  # Usage: git pull-unshallow [<extra-flags>]
+  # Example: git pull-unshallow --rebase
+  pull-unshallow = "!sh -c 'git rev-parse --is-shallow-repository | grep -q true && git pull --all --unshallow \"$@\" || git pull --all \"$@\"' --"
+
+  # Fetches all remotes; if the repo is shallow, unshallows it first. Accepts extra git-fetch flags.
+  # Usage: git fetch-unshallow [<extra-flags>]
+  # Example: git fetch-unshallow --tags
+  fetch-unshallow = "!sh -c 'git rev-parse --is-shallow-repository | grep -q true && git fetch --all --unshallow \"$@\" || git fetch --all \"$@\"' --"
+
   # Prints the name of the current remote repo (assumes remote named 'origin').
   # Usage: git repo
   repo = !basename $(git remote get-url origin)
@@ -212,7 +223,7 @@
   # Full upstream rebase workflow: sets tracking, fetches, rebases from upstream (if present),
   # pushes, updates submodules, and prunes gone branches.
   # Usage: git upreb
-  upreb = !git branch -u origin/$(git br) && git fo && ( git remote | grep upstream &>/dev/null ) && git rebase upstream/$(git br) --no-verify && git fetch upstream --tags && git push --progress --no-verify && git push --progress --tags --no-verify && git siu && git dlb
+  upreb = !git branch -u origin/$(git br) && git fo && ( git remote | grep -x upstream &>/dev/null ) && git rebase upstream/$(git br) --no-verify && git fetch upstream --tags && git push --progress --no-verify && git push --progress --tags --no-verify && git siu && git dlb
 
   # Prunes the local copy of remote-tracking branches deleted on origin.
   # Usage: git rpo
@@ -255,14 +266,14 @@
 
   # Prints the disk size of the current repo's .git directory.
   # Usage: git size
-  size = "!sh -c 'root=$(git rev-parse --show-toplevel); printf \"==> Size of repository at %s: %s\\n\" \"$root\" \"$(du -sh \"$root/.git\" | cut -f1)\"'"
+  size = !printf '==> Size of repository at %s: %s\n' "$(git rev-parse --show-toplevel)" "$(du -sh "$(git rev-parse --show-toplevel)/.git" | cut -f1)"
 
   # Compresses the repo and reclaims disk space by pruning, repacking, and running gc.
   # Set SKIP_SIZE_BEFORE=1 (or any non-empty value) to skip printing size before the operation.
   # Note: '--all' is intentionally omitted from reflog expire to preserve stashes.
   # Usage: git cc
   # Example: SKIP_SIZE_BEFORE=1 git cc
-  cc = "!sh -c '[ -n \"${SKIP_SIZE_BEFORE}\" ] || git size; git remote prune origin; git prune --progress; git pack-refs --all; git repack -a -d --depth=250 --window=250; git reflog expire --all --expire=1.week.ago; git maintenance run --task=gc; git size;'"
+  cc = "!sh -c '[ -n \"${SKIP_SIZE_BEFORE}\" ] || git size; git remote prune origin; git pack-refs --all; git repack -a -d --depth=250 --window=250; git reflog expire --all --expire=1.week.ago; git maintenance run --task=gc; git size;'"
 
   # Lists the 100 biggest objects ever stored in the repo (including deleted files).
   # Usage: git big
@@ -322,9 +333,9 @@
   # Usage: git pushsub
   pushsub = sf "git push --progress"
 
-  # Pulls latest changes in all submodules.
+  # Pulls latest changes in all submodules, unshallowing if needed.
   # Usage: git pullsub
-  pullsub = sf "git pull"
+  pullsub = sf "git pull-unshallow"
 [branch]
   autoSetupMerge = true
   autoSetupRebase = always
@@ -432,7 +443,7 @@
   tabSize = 2
   warnDetachedCommit = true
 [help]
-  autoCorrect = 10
+  autoCorrect = prompt
 [http]
   lowSpeedLimit = 1000
   lowSpeedTime = 30

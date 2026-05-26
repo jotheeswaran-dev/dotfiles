@@ -1,6 +1,30 @@
 As documented in the README's [adopting](README.md#how-to-adoptcustomize-the-scripts-to-your-own-settings) section, this repo and its scripts are aimed at developers/techies. If you are stuck or need help in any fashion, you can reach out to the [owner of the parent repo](https://github.com/vraravam) from where this was forked.
 
-For those who follow this repo, here's the changelog for ease of adoption:
+For those who follow this repo, here's the changelog for ease of changelog:
+
+### 3.0.26
+
+* *[.shellrc, .aliases]* Centralised the re-source guard inside each file itself — all call sites now source unconditionally (no more per-call `(( $+functions[...] )) ||` guards). All custom zsh git commands (`cc`, `count`, `pull`, `push`, `st`, `status_all_repos`, `update_all_repos`, `upreb`) updated accordingly. Sourcing of these 2 files is now refined/tightened without duplication.
+* *[all shell scripts]* Added `# Usage:` lines to all functions that accept arguments; added prose doc comments to all previously undocumented functions; converted `# ==` GROUP banners to `# ---` section dividers throughout both files. Fixed file-header banner width (was 81 chars, now exactly 80); split two combined `local var="$(…)"` declarations into separate declaration + assignment lines.
+* *[custom.gitattributes]* Added `*.defaults binary` so Apple binary plist captures are never diffed or line-ending-normalised by git.
+* *[.editorconfig (both repo root and HOME)]* Full idiom audit: removed incorrect `insert_final_newline = false` overrides for `*.json` and `*.md`; added `indent_style = tab` for `*.{cmd,bat}`; added `charset = unset` + `insert_final_newline = false` for `*.zwc`, `*.zwc.old`, `*.defaults`; added `[*.sql]` and `[*.{xml,plist}]` with `indent_size = 4`; added `[*.envrc]` shfmt block; added `[{custom.gitattributes,…}] indent_size = unset`; set `max_line_length = off` globally.
+* *[.gitconfig]* Added `git pull-unshallow` and `git fetch-unshallow` aliases (auto-unshallow shallow repos before pulling/fetching). `git pullsub` now delegates to `pull-unshallow`. Fixed `git upreb` to use `grep -x upstream` (exact match). Simplified `git size` to avoid a nested subshell. Removed redundant `git prune` from `git cc`. Fixed `git mn` to pass `--no-ff` (required when `merge.ff=only` is set globally). Changed `help.autoCorrect` from `10` (100ms delay) to `prompt`.
+* *[starship.toml]* Git operation state indicators now use `>> LABEL <<` delimiters instead of bare spaces for better visibility in the prompt.
+* *[zsh git commands: cc, count, pull, push, st]* Replaced inline argument-parsing loop with `parse_folder_and_switches`; replaced inline `dispatch_or_fallback` expansion with the shared helper call.
+* *[scripts/]* Fixed stale source comments across all scripts (`add-upstream-git-config.sh`, `capture-prefs.sh`, `capture-raycast-configs.sh`, `cleanup-browser-profiles.sh`, `post-brew-install.sh`, `recreate-repo.sh`, `run-all.sh`, `setup-login-item.sh`, `software-updates-cron.sh`); added missing function doc comments; added `warn` in place of `echo` where `.shellrc` helpers are available.
+* *[scripts/resurrect-repositories.rb]* Miscellaneous comment and style fixes.
+
+#### Adopting these changes
+
+* Rebase from upstream, resolve conflicts, and then proceed with the following steps in all open terminals:
+
+   ```bash
+   cp $DOTFILES_DIR/files/--HOME--/custom.gitattributes $HOME/.gitattributes
+   cp $DOTFILES_DIR/files/--HOME--/custom.gitignore $HOME/.gitignore
+   install-dotfiles.rb
+  ```
+
+* Quit and restart the Terminal application (a full restart is required — sourcing in-place leaves old OMZ functions in memory).
 
 ### 3.0.25
 

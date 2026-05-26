@@ -5,21 +5,14 @@
 # git command: count
 
 # Source shell helpers if they aren't already loaded
-# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
-(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
+# Re-source guard is inside .shellrc itself — safe to call unconditionally.
+source "${HOME}/.shellrc"
 
 # Note: Use a function so that it can accept parameters
 count() {
   local folder
   local -a switches
-  for arg in "$@"; do
-    if [[ "${arg}" == --* ]]; then
-      switches+=("${arg}")
-    elif is_zero_string "${folder}"; then
-      folder="${arg}"
-    fi
-  done
-  folder="${folder:-$(pwd)}"
+  parse_folder_and_switches "$@"
   section_header2 "$(yellow 'Counting commits') $(purple "${folder}")"
   if ! is_git_repo "${folder}"; then
     warn "Skipping finding count of the repo since '$(yellow "${folder}")' doesn't exist or is not a git repo"

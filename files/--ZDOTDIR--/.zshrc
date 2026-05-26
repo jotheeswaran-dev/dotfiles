@@ -21,8 +21,8 @@
 # execute 'ZSH_PROFILE_RC=true zsh -i -c exit' and run 'zprof' to get the details
 [[ -n "${ZSH_PROFILE_RC+1}" ]] && zmodload zsh/zprof
 
-# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
-(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
+# Re-source guard is inside .shellrc itself — safe to call unconditionally.
+source "${HOME}/.shellrc"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Antidote — static plugin bundle
@@ -105,7 +105,16 @@ export ZSH_COMPDUMP="${XDG_CACHE_HOME}/zcompdump"
 # On a vanilla OS (before brew installs antidote) this file is present because
 # it is checked into the home repo. No antidote binary is needed during the
 # shell startup.
-load_file_if_exists "${ANTIDOTE_PLUGIN_ZSH}"
+#
+# Some bundled plugins (e.g. OMZ eza) reference bare positional parameters like
+# $3 without a default, which crashes under NOUNSET (set -u). The fresh-install
+# script runs with `set -euo pipefail`, so NOUNSET is active when load_zsh_configs
+# sources this file. Suspend NOUNSET for the duration of the bundle source only.
+() {
+  setopt LOCAL_OPTIONS
+  unsetopt NOUNSET
+  load_file_if_exists "${ANTIDOTE_PLUGIN_ZSH}"
+}
 
 # Activate mise — the OMZ mise plugin referenced $ZSH_CACHE_DIR (undefined without OMZ)
 # so it has been removed from .zsh_plugins.txt and replaced with a direct activation here.
@@ -294,7 +303,7 @@ if is_macos; then
     prepend_to_manpath_if_dir_exists "${HOMEBREW_PREFIX}/share/man"
 
     use_homebrew_installation_for() {
-      installation_dir="${HOMEBREW_PREFIX}/opt/${1}"
+      local installation_dir="${HOMEBREW_PREFIX}/opt/${1}"
       ! is_directory "${installation_dir}" && return 0 # Success, nothing to do
 
       prepend_to_path_if_dir_exists "${installation_dir}/bin"

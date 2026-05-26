@@ -291,42 +291,38 @@ def resurrect_each(repo, idx, total)
   FileUtils.mkdir_p(folder)
 
   existing_remotes = {} # Store existing remotes {name => url}
-  if git_repo?(folder)
-    info('Already an existing git repo. Checking remotes...')
-    find_git_remotes(folder) do |name, url|
-      existing_remotes[name] = url
+  # NOTE: clone_repo_into is a shell function defined in .shellrc, which is sourced
+  # automatically via .zshenv on every zsh invocation — so a login shell (`-l`) is
+  # sufficient; no explicit `source .shellrc` is needed.
+  # The remote URL and folder come from a trusted YAML config authored by the user,
+  # but we still use `/bin/zsh -lc` explicitly (rather than a bare string passed to
+  # capture3) to make the shell invocation unambiguous and to avoid surprises from $SHELL.
+  clone_command = "clone_repo_into #{repo[REMOTE_KEY_NAME].shellescape} #{folder.shellescape}"
+  stdout_str, stderr_str, status = Open3.capture3({ 'FORCE_COLOR' => '1' }, '/bin/zsh', '-lc', clone_command)
+  print stdout_str
+  unless status.success?
+    error_message = "Failed to clone '#{repo[REMOTE_KEY_NAME]}' into '#{folder}'; aborting (status: #{status.exitstatus})".red
+    error_message += "\nClone command STDERR:\n#{stderr_str}".red unless nil_or_empty?(stderr_str.strip)
+    abort(error_message)
+  end
+
+  # After cloning, verify the origin URL
+  cloned_origin_url = find_git_remote_url(folder, ORIGIN_NAME)
+  if cloned_origin_url
+    existing_remotes[ORIGIN_NAME] = cloned_origin_url
+    if cloned_origin_url != repo[REMOTE_KEY_NAME]
+      warn("Cloned origin URL '#{cloned_origin_url}' differs from config '#{repo[REMOTE_KEY_NAME]}' for '#{folder}'.")
     end
-    info("Existing remotes: #{existing_remotes.keys.join(', ')}") unless nil_or_empty?(existing_remotes)
   else
-    info('Cloning git repo...')
-    # NOTE: clone_repo_into is a shell function defined in .shellrc, so we must invoke a login
-    # shell to source it. The remote URL and folder come from a trusted YAML config authored by
-    # the user, but we still use `/bin/zsh -lc` explicitly (rather than a bare string passed to
-    # capture3) to make the shell invocation unambiguous and to avoid surprises from $SHELL.
-    shellrc = HOME_PATH.join('.shellrc').to_s
-    clone_command = "source #{shellrc.shellescape} && clone_repo_into #{repo[REMOTE_KEY_NAME].shellescape} #{folder.shellescape}"
-    _stdout_str, stderr_str, status = Open3.capture3('/bin/zsh', '-lc', clone_command)
-
-    unless status.success?
-      error_message = "Failed to clone '#{repo[REMOTE_KEY_NAME]}' into '#{folder}'; aborting (status: #{status.exitstatus})".red
-      error_message += "\nClone command STDERR:\n#{stderr_str}".red unless nil_or_empty?(stderr_str.strip)
-      abort(error_message)
-    end
-
-    # After cloning, verify the origin URL
-    cloned_origin_url = find_git_remote_url(folder, ORIGIN_NAME)
-    if cloned_origin_url
-      existing_remotes[ORIGIN_NAME] = cloned_origin_url
-      if cloned_origin_url != repo[REMOTE_KEY_NAME]
-        warn("Cloned origin URL '#{cloned_origin_url}' differs from config '#{repo[REMOTE_KEY_NAME]}' for '#{folder}'.")
-      end
-    else
-      warn("Could not verify origin remote URL after cloning '#{folder}'.")
-      existing_remotes[ORIGIN_NAME] = repo[REMOTE_KEY_NAME] # Assume it matches if verification fails
-    end
+    warn("Could not verify origin remote URL after cloning '#{folder}'.")
+    existing_remotes[ORIGIN_NAME] = repo[REMOTE_KEY_NAME] # Assume it matches if verification fails
   end
 
   # Add missing 'other_remotes'
+  find_git_remotes(folder) do |name, url|
+    existing_remotes[name] = url
+  end
+  debug("Existing remotes: #{existing_remotes.keys.join(', ')}") unless nil_or_empty?(existing_remotes)
   git_base_cmd = build_git_context(folder)
   if repo[OTHER_REMOTES_KEY_NAME].is_a?(Hash)
     repo[OTHER_REMOTES_KEY_NAME].each do |name, remote|

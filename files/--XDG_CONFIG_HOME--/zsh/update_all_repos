@@ -3,8 +3,8 @@
 # vim:filetype=zsh syntax=zsh tabstop=2 shiftwidth=2 softtabstop=2 expandtab autoindent fileencoding=utf-8
 
 # Source shell helpers if they aren't already loaded
-# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
-(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
+# Re-source guard is inside .shellrc itself — safe to call unconditionally.
+source "${HOME}/.shellrc"
 
 # Updates the specified repo (ie creates a local commit of changed files that I am not interested in verifying, but which need to be committed into that repo)
 # internal function: not to be called separately

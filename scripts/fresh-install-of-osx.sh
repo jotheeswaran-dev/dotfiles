@@ -13,7 +13,7 @@
 # 3. Keyboard brightness
 
 # Exit immediately if a command exits with a non-zero status.
-set -e
+set -euo pipefail
 
 # Error trap cleanup and exit
 _cleanup_and_exit() {
@@ -58,17 +58,19 @@ setup_jio_dns() {
 # Download and source .shellrc from GitHub (before dotfiles are cloned)
 download_and_source_shellrc() {
   echo "==> Download the '~/.shellrc' for loading the utility functions"
-  # force the download for FIRST_INSTALL
-  # (( $+functions[...] )) is a no-subshell zsh builtin check, faster than 'type ... &>/dev/null'
-  [[ -n "${FIRST_INSTALL}" ]] && (( $+functions[is_shellrc_sourced] )) && unfunction is_shellrc_sourced
-
-  # Check for one key function defined in .shellrc to see if sourcing is needed
-  if ! (( $+functions[is_shellrc_sourced] )); then
-    [[ ! -f "${HOME}/.shellrc" ]] && curl --retry 3 --retry-delay 5 -fsSL "https://raw.githubusercontent.com/${GH_USERNAME}/dotfiles/refs/heads/${DOTFILES_BRANCH}/files/--HOME--/.shellrc" -o "${HOME}/.shellrc"
-    DEBUG=true source "${HOME}/.shellrc"
+  if [[ -n "${FIRST_INSTALL:-}" ]]; then
+    # Vanilla OS: always force a fresh download and re-source.
+    # Unfunction the guard so .shellrc's own re-source check is bypassed.
+    # This also handles retries on a vanilla OS where the script is re-run after an error.
+    (( $+functions[is_shellrc_sourced] )) && unfunction is_shellrc_sourced
+    curl --retry 3 --retry-delay 5 -fsSL "https://raw.githubusercontent.com/${GH_USERNAME}/dotfiles/refs/heads/${DOTFILES_BRANCH}/files/--HOME--/.shellrc" -o "${HOME}/.shellrc"
+    echo "==> Successfully downloaded '${HOME}/.shellrc'"
   else
-    warn "Skipping downloading and sourcing '$(yellow "${HOME}/.shellrc")' since its already loaded"
+    # Pre-configured OS: skip downloading; the built-in guard makes the source below a no-op if already loaded.
+    warn "Skipping downloading '$(yellow "${HOME}/.shellrc")' since this is not a first install"
   fi
+  DEBUG=true source "${HOME}/.shellrc"
+  info "Successfully sourced '$(yellow "${HOME}/.shellrc")'"
 }
 
 # Enable Touch ID for sudo command when running on the terminal
@@ -76,7 +78,14 @@ approve_fingerprint_sudo() {
   step_start
   section_header "$(yellow 'Setting up touchId for sudo access in terminal shells')"
 
-  if ! ioreg -c AppleBiometricSensor | \grep -q AppleBiometricSensor; then
+  # AppleBiometricSensor = T1/T2 chip (Intel Macs); AppleBiometricServices = Apple Silicon
+  # Note: pipe + grep -q triggers SIGPIPE on ioreg under pipefail (grep exits early after
+  # first match, ioreg gets SIGPIPE exit 141, pipefail surfaces that instead of grep's 0).
+  # Command substitution buffers all ioreg output first, avoiding the SIGPIPE entirely.
+  local has_biometric_sensor=0 has_biometric_services=0
+  [[ -n "$(/usr/sbin/ioreg -c AppleBiometricSensor  2>/dev/null | /usr/bin/grep AppleBiometricSensor)"  ]] && has_biometric_sensor=1  || true
+  [[ -n "$(/usr/sbin/ioreg -c AppleBiometricServices 2>/dev/null | /usr/bin/grep AppleBiometricServices)" ]] && has_biometric_services=1 || true
+  if [[ "${has_biometric_sensor}" == 0 && "${has_biometric_services}" == 0 ]]; then
     warn 'Touch ID hardware is not detected. Skipping configuration.'
     step_end
     return 0  # Exit successfully as no action is needed
@@ -211,7 +220,7 @@ install_homebrew() {
   eval_shellenv "${HOMEBREW_PREFIX}/bin/brew" shellenv
 
   # Note: Temporarily disable the ERR trap since brew commands may fail on a vanilla OS (e.g. rate limits, missing deps).
-  if is_non_zero_string "${FIRST_INSTALL}"; then
+  if is_non_zero_string "${FIRST_INSTALL:-}"; then
     trap - ERR
   fi
 
@@ -226,7 +235,7 @@ install_homebrew() {
   # Note: Split into taps, formulae and casks separately so that curl doesnt timeout, and failures are isolated and reported clearly.
   # Note: Each pass includes the Brewfile preamble (non tap/brew/cask lines) to preserve Ruby DSL context (e.g. cask_args, is_arm).
   # Note: For FIRST_INSTALL, only process lines up to the first 'FIRST_INSTALL' guard in the Brewfile (which marks the end of the base install section).
-  if is_non_zero_string "${FIRST_INSTALL}"; then
+  if is_non_zero_string "${FIRST_INSTALL:-}"; then
     local brewfile_content
     brewfile_content="$(sed "/^[^#].*FIRST_INSTALL/q" "${HOMEBREW_BUNDLE_FILE}")"
     brewfile_content="${brewfile_content%$'\n'*FIRST_INSTALL*}"  # strip the FIRST_INSTALL guard line itself
@@ -247,9 +256,9 @@ install_homebrew() {
   load_zsh_configs
   # Note: run the post-brew-install script once more (in case it wasn't run by the brew lifecycle due to any error)
   # Note: When running with FIRST_INSTALL, some errors might come on a vanilla OS - warn and continue instead of failing.
-  post-brew-install.sh || { is_non_zero_string "${FIRST_INSTALL}" && warn 'post-brew-install encountered errors; continuing...'; }
+  post-brew-install.sh || { is_non_zero_string "${FIRST_INSTALL:-}" && warn 'post-brew-install encountered errors; continuing...'; }
 
-  if is_non_zero_string "${FIRST_INSTALL}"; then
+  if is_non_zero_string "${FIRST_INSTALL:-}"; then
     trap _cleanup_and_exit ERR
   fi
 
@@ -305,6 +314,11 @@ main() {
 
   export ZDOTDIR="${ZDOTDIR:-"${HOME}"}"
 
+  # On a first install ~/.gitconfig is not yet in place (install-dotfiles.rb runs later),
+  # so core.sshCommand is absent. Export GIT_SSH_COMMAND for the entire run to ensure the
+  # connect timeout is honoured uniformly for all git operations.
+  [[ -n "${FIRST_INSTALL:-}" ]] && export GIT_SSH_COMMAND="ssh -o ConnectTimeout=20"
+
   # Note: Cannot load from shellrc since that file won't be present in a new machine (vanilla OS)
   # $EPOCHSECONDS is provided by the zsh/datetime built-in module — always available, no fork.
   # Capture start epoch into both a local variable and SCRIPT_START_TIMES.
@@ -321,9 +335,7 @@ main() {
   strftime -s script_start_time_human '%Y-%m-%d %H:%M:%S' "${EPOCHSECONDS}"
   echo "==> Script started at: ${script_start_time_human}"
 
-  ###############################
-  # Do not allow rootless login #
-  ###############################
+  # Do not allow rootless login.
   # Note: Commented out since I am not sure if we need to do this on the office MBP or not
   # section_header "$(yellow 'Verifying rootless login enabled status')"
   # if [[ "$(/usr/bin/csrutil status | awk '/status/ {print $5}' | sed 's/\.$//')" == "enabled" ]]; then
@@ -331,9 +343,7 @@ main() {
   #   exit 1 # Irrecoverable failure
   # fi
 
-  ############################
-  # Disable macos gatekeeper #
-  ############################
+  # Disable macOS Gatekeeper.
   # section_header "$(yellow 'Disabling macos gatekeeper')"
   # sudo spectl --master-disable
 
@@ -368,22 +378,9 @@ main() {
   update_antidote_and_regenerate_plugin_bundle
 
   if is_non_zero_string "${KEYBASE_USERNAME}"; then
-    if ! command_exists keybase; then
-      error 'Keybase not found in the PATH. Aborting!!!'
-      exit 1 # Irrecoverable failure
-    fi
-
-    ######################
-    # Login into keybase #
-    ######################
+    # Login into Keybase.
     step_start
-    debug "$(yellow 'Logging into keybase')"
-    if keybase status --json 2>/dev/null | \grep -q '"logged_in":true'; then
-      warn "Skipping keybase login since '$(yellow "${KEYBASE_USERNAME}")' is already logged in"
-    elif ! keybase login; then
-      error 'Could not login into keybase. Retry after logging in.'
-      exit 1 # Irrecoverable failure
-    fi
+    ensure_keybase_logged_in || exit 1
     step_end
 
     clone_home_repo
@@ -395,9 +392,7 @@ main() {
 
   is_file "${SSH_CONFIGS_DIR}/known_hosts.old" && rm -f "${SSH_CONFIGS_DIR}/known_hosts.old"
 
-  ###################################################################
-  # Restore the preferences from the older machine into the new one #
-  ###################################################################
+  # Restore the preferences from the older machine into the new one.
   step_start
   section_header "$(yellow 'Restore preferences')"
   if command_exists 'osx-defaults.sh'; then
@@ -419,18 +414,14 @@ main() {
   fi
   step_end
 
-  ################################
-  # Recreate the zsh completions #
-  ################################
+  # Recreate the zsh completions.
   step_start
   section_header "$(yellow 'Recreate zsh completions')"
   rm -rf "${XDG_CACHE_HOME}/zcompdump"* &>/dev/null  || true
   autoload -Uz compinit && compinit -C -d "${XDG_CACHE_HOME}/zcompdump" &>/dev/null  || true
   step_end
 
-  ###################
-  # Setup cron jobs #
-  ###################
+  # Setup cron jobs.
   step_start
   section_header "$(yellow 'Setup cron jobs')"
   if command_exists recron; then
@@ -443,9 +434,7 @@ main() {
   fi
   step_end
 
-  ###########################
-  # Resurrect tracked repos #
-  ###########################
+  # Resurrect tracked repos.
   # For now, to save time while re-imaging/setting up the laptop, we'll skip resurrecting all the tracked repos
   # resurrect_tracked_repos
 

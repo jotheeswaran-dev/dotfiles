@@ -257,7 +257,6 @@ node_modules/
 /.config/jgit/config
 /.config/nvim/autoload/plug.vim
 /.config/nvim/plugged/
-/.config/raycast/extensions/
 /.config/simple-update-notifier/electron-builder.json
 /.config/sol/images_pasteboard/
 /.config/sol/mmkv.default*

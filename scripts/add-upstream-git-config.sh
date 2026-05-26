@@ -6,11 +6,10 @@
 # TODO: Need to decide whether this script is best kept standalone or converted to a function that's used only within the fresh-install script (or) moved into the global .gitconfig so as to be used as a git alias. Each of these has their own pros & cons which need to be analyzed.
 
 # Exit immediately if a command exits with a non-zero status.
-set -e
+set -euo pipefail
 
-# Source shellrc only once if any required function is missing
-# Faster than 'type is_shellrc_sourced &>/dev/null': no subshell, pure zsh builtin check.
-(( $+functions[is_shellrc_sourced] )) || source "${HOME}/.shellrc"
+# Re-source guard is inside .shellrc itself — safe to call unconditionally.
+source "${HOME}/.shellrc"
 
 usage() {
   echo "$(red 'Usage'): $(yellow "${${(%):-%x}##*/}") -d <target-folder> -u <upstream-repo-owner>"
@@ -19,11 +18,17 @@ usage() {
   exit 1
 }
 
-# retrieve the URL for a given remote name from target_folder
+# Returns the fetch URL for the named remote in the given folder, or an empty string if the
+# remote does not exist. Prints an error and returns 1 if the remote exists but its URL cannot
+# be retrieved.
+# Usage: get_remote_url <folder> <remote-name>
 get_remote_url() {
   local folder="${1}" remote_name="${2}"
-  local remote_url
-  if git -C "${folder}" remote | grep -q "^${remote_name}$"; then
+  local remote_url=''
+  # Note: avoid `git remote | grep -q` under set -o pipefail — grep -q exits after the
+  # first match, sending SIGPIPE to git (exit 141); pipefail surfaces that instead of
+  # grep's 0, inverting the condition. $() buffers all output first, avoiding SIGPIPE.
+  if [[ -n "$(git -C "${folder}" remote 2>/dev/null | grep "^${remote_name}$")" ]]; then
     if ! remote_url=$(git -C "${folder}" remote get-url "${remote_name}" 2>/dev/null); then
       error "Could not retrieve URL for remote '${remote_name}' in '$(yellow "${folder}")'. Does the remote exist?"
       return 1
@@ -33,8 +38,8 @@ get_remote_url() {
 }
 
 main() {
-  local target_folder
-  local upstream_repo_owner
+  local target_folder=''
+  local upstream_repo_owner=''
 
   while getopts ":d:u:" opt; do
     case ${opt} in
@@ -122,8 +127,8 @@ main() {
     error "Failed to add upstream remote '$(yellow "${new_repo_url}")'"
   fi
 
-  # Fetch the newly added remote
-  if ! GIT_SSH_COMMAND="ssh -o ConnectTimeout=20" git -C "${target_folder}" fetch upstream; then
+  # Fetch all remotes, unshallowing if needed (covers the newly added upstream and origin)
+  if ! git -C "${target_folder}" fetch-unshallow; then
     error "Failed to fetch upstream remote '$(yellow "${new_repo_url}")' after adding it."
   fi
 
