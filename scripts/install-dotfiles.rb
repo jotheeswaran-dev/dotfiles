@@ -12,12 +12,18 @@
 # It assumes the following:
 #   1. Ruby language is present in the system prior to this script being run.
 
-require_relative 'utilities/logging'
+# Ensure utilities/ is on the load path so 'require' works regardless of whether
+# RUBYLIB is set. This is necessary during FIRST_INSTALL (fresh-install-of-osx.sh)
+# where the dotfiles repo is cloned after .shellrc is first sourced, so RUBYLIB does
+# not yet include this directory when install-dotfiles.rb is first invoked.
+$LOAD_PATH.unshift(File.join(__dir__, 'utilities'))
+
+require 'logging'
 include Logging
+require 'cli_parser'
 require 'fileutils'
 require 'find'
 require 'pathname' # NOTE: This has been added explicitly due to the default version of ruby (2.6) on a vanilla macos. Once the default ruby upgrades to 3.x, we can remove
-require 'optparse'
 
 # --- Constants ---
 ENV_VAR_REGEX = /--(.*?)--/.freeze # For interpolating environment variables like --VAR--
@@ -34,28 +40,19 @@ DOTFILES_ROOT_PATH = Pathname.new(__dir__).join('..', 'files').expand_path
 
 # Parse command-line options
 options = { dry_run: false, verbose: false, force: false }
-parser = OptionParser.new do |opts|
-  opts.banner = "Usage: #{File.basename(__FILE__)} [options]"
-  opts.on('-n', '--dry-run', 'Show what would be done without doing it') do
+CliParser.parse('[options]') do |opts|
+  opts.separator 'Installs dotfiles from this repo into the home folder by creating symlinks (or copying for .gitattributes/.gitignore).'
+  opts.separator 'If a real file already exists at the target, it is moved into the repo first, then symlinked.'
+  opts.separator ''
+  opts.on('-n', '--dry-run', 'Show what would be symlinked/copied without making any changes') do
     options[:dry_run] = true
   end
-  opts.on('-v', '--verbose', 'Verbose output') do
+  opts.on('-v', '--verbose', 'Print each file operation (symlink created, skipped, backed up, etc.)') do
     options[:verbose] = true
   end
-  opts.on('-f', '--force', 'Force overwrite without backing up existing files') do
+  opts.on('-f', '--force', 'Overwrite existing non-symlink files without backing them up first') do
     options[:force] = true
   end
-  opts.on('-h', '--help', 'Show this help message') do
-    puts opts
-    exit
-  end
-end
-begin
-  parser.parse!
-rescue OptionParser::InvalidOption, OptionParser::MissingArgument => e
-  $stderr.puts e.message
-  $stderr.puts parser
-  exit 1
 end
 
 # Statistics tracking — use a Struct so the intent (a mutable bag of counters) is explicit
@@ -68,7 +65,7 @@ STATS = Stats.new(processed: 0, created: 0, updated: 0, skipped: 0, errors: 0)
 # @param path_template [String] The path template containing --VAR-- placeholders.
 # @param source_file [String] The source file path, used for logging purposes.
 # @return [String, nil] The interpolated path, or +nil+ if any referenced environment variable is missing.
-def interpolate_path(path_template, source_file)
+def _interpolate_path(path_template, source_file)
   # First, check if all referenced environment variables exist.
   # This avoids partial processing if a variable is missing later.
   # It also ensures that we check for key presence, not just a truthy value.
@@ -91,40 +88,40 @@ end
 # @param verbose [true, false] Verbose output.
 # @param force [true, false] Force overwrite without backing up existing files.
 # @return [void]
-def process_dotfile(source_pn, target_pn, dry_run: false, verbose: false, force: false)
-  source_path = source_pn.to_s.replace_home_path_with_tilde
-  target_path = target_pn.to_s.replace_home_path_with_tilde
+def _process_dotfile(source_pn, target_pn, dry_run: false, verbose: false, force: false)
+  source_path = source_pn.to_s.cyan
+  target_path = target_pn.to_s.cyan
 
   STATS.processed += 1
 
-  info("Processing #{source_path} --> #{target_path}") if dry_run || verbose
+  info("Processing '#{source_path}' --> '#{target_path}'") if dry_run || verbose
 
   # Ensure target directory exists
   FileUtils.mkdir_p(target_pn.dirname) unless dry_run
 
   if target_pn.exist? && FileUtils.identical?(target_pn, source_pn) # Avoid moving if they are already the same file (e.g., if the user re-runs the script without changes)
-    # puts "  Target #{target_path.cyan} and source #{source_path.cyan} are identical.".blue if verbose
+    debug("  Target '#{target_path}' and source '#{source_path}' are identical.".blue) if dry_run || verbose
     STATS.skipped += 1
     return
   end
 
   # Check target status before deciding action
   if target_pn.symlink?
-    info("  Target #{target_path} exists as a symlink, will overwrite.") if verbose
+    info("  Target '#{target_path}' exists as a symlink, will overwrite.") if verbose
     STATS.updated += 1
   elsif target_pn.exist? # It exists and is not a symlink (real file/dir)
     if force
-      info("  Forcefully overwriting existing file #{target_path}") if verbose
+      info("  Forcefully overwriting existing file '#{target_path}'") if verbose
       FileUtils.rm_rf(target_pn) unless dry_run
     else
-      info("  Moving existing file #{target_path} to #{source_path} (it will become the new version in your dotfiles repo)") if verbose
+      info("  Moving existing file '#{target_path}' to '#{source_path}' (it will become the new version in your dotfiles repo)") if verbose
       # Move the existing file from target to the source location in the dotfiles repo
       FileUtils.mv(target_pn, source_pn, force: true) unless dry_run
     end
     STATS.updated += 1
   else
     # Target does not exist, no backup needed
-    info("  Target #{target_path} does not exist, creating new link/copy.") if verbose
+    info("  Target '#{target_path}' does not exist, creating new link/copy.") if verbose
     STATS.created += 1
   end
 
@@ -133,11 +130,11 @@ def process_dotfile(source_pn, target_pn, dry_run: false, verbose: false, force:
     info("  Copying #{source_path} to #{target_path}") if verbose
     FileUtils.cp(source_pn, target_pn) unless dry_run
   else
-    info("  Creating symlink from #{source_path} to #{target_path}")
+    info("  Creating symlink from '#{source_path}' to '#{target_path}'")
     FileUtils.ln_sf(source_pn, target_pn) unless dry_run
   end
 rescue StandardError => e
-  warn("Failed during processing of #{source_path} -> #{target_path}: #{e.message}")
+  warn("Failed during processing of '#{source_path}' -> '#{target_path}': #{e.message}")
   warn(Array(e.backtrace).join("\n"))
   STATS.errors += 1
 end
@@ -146,14 +143,14 @@ end
 # Extracted from top-level code so it is testable and has a clear failure boundary.
 #
 # @return [void]
-def ensure_ssh_include_line
+def _ensure_ssh_include_line
   # Use Pathname for correct path joining — plain String + 'name' is string concatenation,
   # not path joining, which would produce a broken path if SSH_CONFIGS_DIR has no trailing slash.
   ssh_folder = Pathname.new(ENV.fetch('SSH_CONFIGS_DIR')).expand_path
   global_config_link = ssh_folder.join('global_config')
 
   unless global_config_link.exist? && global_config_link.symlink?
-    warn("Skipping SSH config update because '#{global_config_link.to_s.replace_home_path_with_tilde}' does not exist or is not a symlink.")
+    warn("Skipping SSH config update because '#{global_config_link.to_s.cyan}' does not exist or is not a symlink.")
     return
   end
 
@@ -164,13 +161,13 @@ def ensure_ssh_include_line
   begin
     # Use File.foreach to stream the file line-by-line instead of loading it all into memory.
     if File.foreach(default_ssh_config).any? { |l| l.strip == include_line }
-      success("'#{include_line}' already present in '#{default_ssh_config.to_s.replace_home_path_with_tilde}'")
+      success("'#{include_line.yellow}' already present in '#{default_ssh_config.to_s.cyan}'")
     else
-      info("Adding '#{include_line}' to '#{default_ssh_config.to_s.replace_home_path_with_tilde}'")
+      info("Adding '#{include_line}' to '#{default_ssh_config.to_s.cyan}'")
       File.write(default_ssh_config, "\n#{include_line}\n", mode: 'a')
     end
   rescue StandardError => e
-    warn("Failed processing SSH config '#{default_ssh_config.to_s.replace_home_path_with_tilde}': #{e.message}")
+    warn("Failed processing SSH config '#{default_ssh_config.to_s.cyan}': #{e.message}")
   end
 end
 
@@ -190,14 +187,14 @@ Find.find(DOTFILES_ROOT_PATH) do |source_path_str|
   relative_path_str = source_pn.relative_path_from(DOTFILES_ROOT_PATH).to_s
   transformed_relative_path_str = relative_path_str.gsub(CUSTOM_GIT_STRING_TO_REPLACE, DOT_GIT_REPLACEMENT_TARGET)
 
-  interpolated_target_str = interpolate_path(transformed_relative_path_str, source_pn.to_s)
+  interpolated_target_str = _interpolate_path(transformed_relative_path_str, source_pn.to_s)
   next unless interpolated_target_str # Skip if env var interpolation failed
 
   # since some env var might already contain the full path from the root...
   # Pathname#join correctly handles cases where interpolated_target_str might already be an absolute path.
   # if the target path is still relative after interpolation, then we should treat it as relative to the root directory
   target_pn = ROOT_PATH.join(interpolated_target_str)
-  process_dotfile(source_pn, target_pn, **options)
+  _process_dotfile(source_pn, target_pn, **options)
 end
 
 # Print statistics summary
@@ -209,6 +206,6 @@ puts "  Updated:   #{STATS.updated}"
 puts "  Skipped:   #{STATS.skipped}"
 puts "  Errors:    #{STATS.errors.positive? ? STATS.errors.to_s.red : STATS.errors}"
 
-ensure_ssh_include_line
+_ensure_ssh_include_line
 
 warn("Since the '.gitignore' and '.gitattributes' files are COPIED over, any new changes being pulled in (from a newer version of the upstream repo) need to be manually reconciled between this repo and your home and profiles folders")

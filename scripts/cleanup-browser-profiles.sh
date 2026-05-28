@@ -7,9 +7,8 @@
 # set -euo pipefail is intentionally omitted: some cleanup steps (find, rm on
 # missing files) return non-zero in normal operation and must not abort the script.
 
-# Re-source guard is inside .aliases itself — safe to call unconditionally.
-# Sourcing .aliases also brings in .shellrc (which .aliases sources internally).
 source "${HOME}/.aliases"
+_SCRIPT_NAME="${0:t}"
 
 # Vacuums SQLite databases larger than 10 MB and deletes known cache/session files from a
 # browser's profile folder. Skips processing if the browser process is running. Supports
@@ -19,29 +18,31 @@ source "${HOME}/.aliases"
 vacuum_browser_profile_folder() {
   local browser_name="${1}"   # Passed browser name
   local profile_folder="${2}" # Profile folder path
-  local dry_run="${3:-0}"        # Dry-run flag (1 = dry-run)
-  local show_stats="${4:-0}"     # Show statistics flag (1 = show stats)
+  local dry_run="${3:-0}"     # Dry-run flag (1 = dry-run)
+  local show_stats="${4:-0}"  # Show statistics flag (1 = show stats)
+  zmodload zsh/stat
+
+  # Reads a pattern file into a caller-declared array variable.
+  # Skips comment lines (# ...) and blank/whitespace-only lines.
+  # Usage: _read_pattern_file <file-path> <array-variable-name>
+  _read_pattern_file() {
+    local _file="${1}" _var="${2}"
+    is_file "${_file}" || return 0
+    local _line
+    while IFS= read -r _line; do
+      [[ "${_line}" =~ '^[[:space:]]*#' || -z "${_line//[[:space:]]/}" ]] && continue
+      eval "${_var}+=(\"\${_line}\")"
+    done < "${_file}"
+  }
 
   # Read pattern files from DOTFILES_DIR
   local -a file_patterns dir_patterns
   local file_patterns_file="${DOTFILES_DIR}/scripts/data/cleanup-browser-files.txt"
   local dir_patterns_file="${DOTFILES_DIR}/scripts/data/cleanup-browser-dirs.txt"
-  if is_file "${file_patterns_file}"; then
-    # while+read replaces $("${(@f)$(grep -vE ...)}"): no grep subprocess fork.
-    # =~ regex test skips comment lines; ${_line//[[:space:]]/} blank-line check.
-    local _line
-    while IFS= read -r _line; do
-      [[ "${_line}" =~ '^[[:space:]]*#' || -z "${_line//[[:space:]]/}" ]] && continue
-      file_patterns+=("${_line}")
-    done < "${file_patterns_file}"
-  fi
-  if is_file "${dir_patterns_file}"; then
-    local _line
-    while IFS= read -r _line; do
-      [[ "${_line}" =~ '^[[:space:]]*#' || -z "${_line//[[:space:]]/}" ]] && continue
-      dir_patterns+=("${_line}")
-    done < "${dir_patterns_file}"
-  fi
+  # while+read replaces $("${(@f)$(grep -vE ...)}"): no grep subprocess fork.
+  # =~ regex test skips comment lines; ${_line//[[:space:]]/} blank-line check.
+  _read_pattern_file "${file_patterns_file}" file_patterns
+  _read_pattern_file "${dir_patterns_file}" dir_patterns
 
   if pgrep -i -f -q "${browser_name}"; then
     warn "Shutdown '$(yellow "${browser_name}")' first!; skipping processing of files for ${browser_name}"
@@ -68,13 +69,14 @@ vacuum_browser_profile_folder() {
 
     while IFS= read -r -d '' db_file; do
       ((db_count++))
-      local db_size=$(stat -f%z "${db_file}" 2>/dev/null || echo 0)
+      local db_size
+      zstat -A db_size +size "${db_file}" 2>/dev/null || db_size=0
       # Only vacuum if > 10MB to save time
       if [[ ${db_size} -gt 10485760 ]]; then
         if [[ ${dry_run} -eq 1 ]]; then
-          echo "[DRY-RUN] Would vacuum: $(replace_home_with_tilde "${db_file}") ($(numfmt --to=iec ${db_size} 2>/dev/null || echo "${db_size} bytes"))"
+          echo "[DRY-RUN] Would vacuum: ${db_file//${HOME}/~} ($(numfmt --to=iec ${db_size} 2>/dev/null || echo "${db_size} bytes"))"
         else
-          echo "Vacuuming: $(replace_home_with_tilde "${db_file}")"
+          echo "Vacuuming: ${db_file//${HOME}/~}"
           if ! sqlite3 "${db_file}" 'PRAGMA journal_mode=WAL; VACUUM; REINDEX;'; then
             warn "sqlite3 failed for '$(yellow "${db_file}")'"
             vacuum_failed=1
@@ -96,18 +98,18 @@ vacuum_browser_profile_folder() {
   # --- Combined Deletion Logic ---
   # Build find arguments for files
   local file_find_args=()
-  if [[ ${#file_patterns[@]} -gt 0 ]]; then
+  if is_non_empty_array file_patterns; then
     for pattern in "${file_patterns[@]}"; do
-      [[ ${#file_find_args[@]} -gt 0 ]] && file_find_args+=('-o')
+      is_non_empty_array file_find_args && file_find_args+=('-o')
       file_find_args+=('-iname' "${pattern}")
     done
   fi
 
   # Build find arguments for directories
   local dir_find_args=()
-  if [[ ${#dir_patterns[@]} -gt 0 ]]; then
+  if is_non_empty_array dir_patterns; then
     for pattern in "${dir_patterns[@]}"; do
-      [[ ${#dir_find_args[@]} -gt 0 ]] && dir_find_args+=('-o')
+      is_non_empty_array dir_find_args && dir_find_args+=('-o')
       dir_find_args+=('-iname' "${pattern}")
     done
   fi
@@ -116,11 +118,11 @@ vacuum_browser_profile_folder() {
   local combined_find_cmd=('find' "${profile_folder}" '-mindepth' '1')
   local has_conditions=0 # Flag to track if any conditions were added
 
-  if [[ ${#file_find_args[@]} -gt 0 ]]; then
+  if is_non_empty_array file_find_args; then
     combined_find_cmd+=('\(' '-type' 'f' '\(' "${file_find_args[@]}" '\)' '\)')
     has_conditions=1
   fi
-  if [[ ${#dir_find_args[@]} -gt 0 ]]; then
+  if is_non_empty_array dir_find_args; then
     # Add '-o' separator if file conditions were already added
     [[ $has_conditions -eq 1 ]] && combined_find_cmd+=('-o')
     combined_find_cmd+=('\(' '-type' 'd' '-depth' '\(' "${dir_find_args[@]}" '\)' '\)')
@@ -138,9 +140,14 @@ vacuum_browser_profile_folder() {
       [[ ${total_count} -gt 20 ]] && echo "  ... and $((total_count - 20)) more items"
     else
       echo 'Deleting files and directories matching patterns...'
-      local -a _items=("${(@f)$("${combined_find_cmd[@]}" -print 2>/dev/null)}")
-      local deleted_count=${#_items}
-      if ! "${combined_find_cmd[@]}" -delete; then
+      # Single find pass: -print emits names (captured for count), -delete removes them.
+      local -a _items
+      local deleted_count=0
+      while IFS= read -r _item; do
+        _items+=("${_item}")
+        ((deleted_count++))
+      done < <("${combined_find_cmd[@]}" -print -delete 2>/dev/null)
+      if [[ $? -ne 0 ]]; then
         warn "Combined find/delete operation failed (code: $?) in '$(yellow "${profile_folder}")'.";
       else
         [[ ${show_stats} -eq 1 ]] && echo "  -> Deleted ${deleted_count} items"
@@ -160,6 +167,12 @@ vacuum_browser_profile_folder() {
   success "Successfully processed profile folder for '$(yellow "${browser_name}")'"
 }
 
+usage() {
+  print_usage "${1}" \
+    "$(yellow '-n') --> Dry-run mode (show what would be done without doing it)" \
+    "$(yellow '-s') --> Show detailed statistics"
+}
+
 main() {
   # Parse command line options
   local dry_run=0
@@ -173,10 +186,8 @@ main() {
         show_stats=1
         ;;
       \?)
-        echo "$(red "Usage"): $(yellow "${${(%):-%x}##*/}") [-n] [-s]"
-        echo "  -n  Dry-run mode (show what would be done without doing it)"
-        echo "  -s  Show detailed statistics"
-        exit 2
+        warn "-${OPTARG} is not a valid option"
+        usage "${_SCRIPT_NAME}"
         ;;
     esac
   done

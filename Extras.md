@@ -43,9 +43,9 @@ Basically, to get started with the dotfiles, you just need to run the `${DOTFILE
 
 * If you already have any of the dotfiles that are managed via this repo, *DON'T WORRY!* Your files will be moved to the cloned folder - so that you can then commit and push them to your fork!
 * This script will also handle nested config files - as long as they are already present in this repo.
-* Special handling (rename + copy instead of symlink) for `.gitattributes` and `.gitignore` - which means that, *for those files alone*, you will have to **keep them manually in sync**.
+* Special handling (rename + copy instead of symlink) for `custom.git*` files (`.gitattributes`, `.gitignore`) — git itself does not handle symlinks reliably for its own core config files, so these are copied rather than symlinked. This means **you must always edit the `custom.git*` source files in this repo**, never the copies at the destination. They will not auto-update like symlinks do.
 * If you do not want a specific file from the home folder to be overridden, simply delete it from this repo's `files` folder - and it will not be processed.
-* If you wish to add a new file to be tracked and managed via this backup mechanism, simply add it into the `files` folder with the requisite relative path (relative to your `/` folder) - and it will be processed.
+* If you wish to add a new file to be tracked and managed via this backup mechanism, add it into the appropriate `files/--VAR--/` subdirectory matching the destination env var. The `--VAR--` naming convention: each subdirectory name is an environment variable name wrapped in double-dashes (e.g. `--HOME--` resolves to `$HOME`, `--XDG_CONFIG_HOME--` resolves to `$XDG_CONFIG_HOME`). Files inside are symlinked into the resolved directory. Plain subdirectory names without the `--VAR--` pattern are also valid — they resolve literally from `/` (e.g. `files/etc/` → `/etc/`), but the `--VAR--` convention is preferred for portability across machines where paths may differ.
 
 ## osx-defaults.sh
 
@@ -53,11 +53,7 @@ This script is the erstwhile script to codify the macos setup. It can be used to
 
 ## post-brew-install.sh
 
-This script is a collection of commands that need to be run after `brew bundle` so as to setup proper command-line usage of some of the gui apps like VSCode, Rancher, etc. It is invoked from the Brewfile's `at_exit` block and handles:
-
-* Symlinking GUI applications for command-line access (e.g., `code`, `keybase`, `zed`)
-* Removing conflicting zsh completion files
-* Cleaning up legacy executable paths
+This script is a collection of commands that need to be run after `brew bundle` to set up proper command-line usage of some GUI apps (VSCode, Rancher, etc.), remove conflicting zsh completion files, and clean up legacy executable paths. It is called automatically by `fresh-install-of-osx.sh` after `brew bundle` completes. It can also be run manually at any time — it is idempotent.
 
 ## recreate-repo.sh
 
@@ -134,5 +130,29 @@ Run the following command to generate and update your crontab:
   ```bash
   recron
   ```
+
+## Zsh Autoload Functions
+
+A set of git-workflow functions are available as zsh autoloads (lazily loaded on first call) from `files/--XDG_CONFIG_HOME--/zsh/`:
+
+| Function | What it does |
+|----------|-------------|
+| `cc` | Compacts the git repo (`git cc` — garbage collection, pruning, etc.) |
+| `push` | Pushes current branch; handles force-with-lease for rebased branches |
+| `pull` | Pulls with rebase; handles shallow-clone unshallowing |
+| `upreb` | Fetches upstream and rebases the current branch onto it |
+| `st` / `status_all_repos` | Git status for the current repo / all tracked repos |
+| `update_all_repos` | Pulls/rebases all tracked repos in one shot |
+| `count` | Counts commits in the current branch ahead of the remote |
+
+Each of these supports **per-project overrides**: if a file named `<cmd>-<current-directory-name>.sh` exists in `$PERSONAL_BIN_DIR` and is executable, it is sourced instead of the default implementation. This lets you customize behaviour for specific projects without modifying the shared function. For example, a file `$PERSONAL_BIN_DIR/push-my-project.sh` will be sourced when you run `push` from inside a directory called `my-project`.
+
+## delete_caches
+
+Removes all compiled zsh bytecode (`.zwc` files) and other generated cache files (Homebrew shellenv cache, starship cache, mise activation cache, git version cache). Run this when zsh startup behaves unexpectedly or after making significant changes to startup files — zsh will regenerate everything on the next shell open.
+
+```zsh
+delete_caches
+```
 
 Back to the [readme](README.md#extrasdetails)

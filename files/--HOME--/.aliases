@@ -13,18 +13,18 @@
 # without needing their own check. This return is a no-op cost (single builtin).
 # ZSH_VERSION guard ensures the zsh-only '(( $+functions[...] ))' syntax is never
 # evaluated by non-zsh runtimes (e.g. direnv's sandbox).
-[[ -n "${ZSH_VERSION-}" ]] && (( $+functions[is_aliases_sourced] )) && return
+[[ -n "${ZSH_VERSION-}" ]] && (($+functions[is_aliases_sourced]))   && return
+
+# Dummy function to check if .aliases is sourced (mirrors is_shellrc_sourced in .shellrc)
+is_aliases_sourced() {
+  return 0
+}
 
 # execute 'DEBUG=true zsh' to debug the load order of the custom zsh configuration files
 [[ -n "${DEBUG+1}" ]] && echo "loading ${0}"
 
 # Re-source guard is inside .shellrc itself — safe to call unconditionally.
 source "${HOME}/.shellrc"
-
-# Dummy function to check if .aliases is sourced (mirrors is_shellrc_sourced in .shellrc)
-is_aliases_sourced() {
-  return 0
-}
 
 # --------------------------------------------------------------------------
 # String utilities (zsh-only; not needed in direnv/bash so lives here not .shellrc)
@@ -34,11 +34,12 @@ is_aliases_sourced() {
 # Uses pure-zsh nested expansion — safe here since .aliases is never sourced by bash.
 # Usage: extract_last_segment <path>
 extract_last_segment() {
-  echo "${${1%/}##*/}"
+  echo "${"${1%/}"##*/}"
 }
 
 # --------------------------------------------------------------------------
 # GROUP 3: Ongoing Daily-Use Aliases & Functions
+# (Groups 1 and 2 are defined in .shellrc — bootstrap utilities and core predicates.)
 # Loaded after .shellrc via .zshrc. These are convenience wrappers, maintenance
 # tools, and project-specific helpers used during interactive shell sessions.
 # --------------------------------------------------------------------------
@@ -76,83 +77,51 @@ if command_exists 'run-all.sh'; then
   alias home="FOLDER='${HOME}' FILTER='.bin|.dotfiles|zsh|mise' MAXDEPTH=5 rug"
   is_directory "${PERSONAL_PROFILES_DIR}" && alias profiles="FOLDER='${PERSONAL_PROFILES_DIR}' MAXDEPTH=5 rug"
 
-  # ---------------------------------------------------------------------------
-  # Dynamic per-project aliases (e.g. 'work-myrepo' -> run-all.sh scoped to
-  # that folder).  Building these requires a 'find' across PROJECTS_BASE_DIR
-  # which can take 50-200ms on a large dev tree.
-  #
-  # Optimisation: the alias definitions are written to a cache file and sourced
-  # on every shell start.  The cache is only regenerated when:
-  #   a) it does not exist yet, OR
-  #   b) PROJECTS_BASE_DIR itself is newer than the cache (i.e. a repo was
-  #      added or removed at the top level), OR
-  #   c) the user explicitly calls regenerate_repo_aliases.
-  #
-  # Call 'regenerate_repo_aliases' any time you add/remove a project folder
-  # at a level deeper than the top of PROJECTS_BASE_DIR.
-  # ---------------------------------------------------------------------------
-
-  # Internal: runs the find-based scan and writes alias definitions to stdout.
-  # Extracted so both the cache-builder and regenerate_repo_aliases can call it.
-  _generate_repo_aliases() {
-    if ! is_directory "${PROJECTS_BASE_DIR}"; then
-      return 0
-    fi
-
-    local -A seen_parent_folders
-    local -a parent_folders
-
-    # process substitution keeps 'while' in the current shell (no subshell for the loop body);
-    # :h replaces $(dirname ...) with a zsh parameter expansion (no fork per iteration);
-    # associative array replaces 'sort -u' piped through an external process
-    while IFS= read -r p; do
-      local ancestor="${p:h:h}" # parent of .git = repo root; parent of that = first ancestor to check
-      while [[ "${ancestor}" != "${PROJECTS_BASE_DIR}" && "${ancestor}" != "/" ]]; do
-        if is_zero_string "${seen_parent_folders[$ancestor]}"; then
-          seen_parent_folders[$ancestor]=1
-          parent_folders+=("${ancestor}")
-        fi
-        ancestor="${ancestor:h}"
-      done
-    done < <(find "${PROJECTS_BASE_DIR}" -maxdepth 6 -type d -name '.git')
-
-    if [[ ${#parent_folders[@]} -gt 0 ]]; then
-      for folder_path in "${parent_folders[@]}"; do
-        local relative_path="${folder_path#${PROJECTS_BASE_DIR}/}"
-        local hyphenated_txt="${relative_path//\//-}"
-        # Write alias definition to stdout so the caller can cache or eval it
-        # The alias name is the folder name with the base dir removed and '/' replaced with '-'
-        echo "alias ${hyphenated_txt}=\"FOLDER='${folder_path}' MAXDEPTH=4 rug\""
-      done
-    fi
-  }
-
-  # Public: force-regenerates the cache and re-sources it in the current shell.
-  # Call this after adding or removing project directories.
+  # Regenerates the repo alias cache and re-sources it in the current shell.
+  # Without -f: silent; only rebuilds if the cache is missing or stale.
+  # With -f:    always rebuilds and prints progress (use after adding/removing nested project dirs).
   regenerate_repo_aliases() {
-    local cache="${XDG_CACHE_HOME}/repo-aliases.zsh"
-    info "Regenerating repo aliases cache..."
-    _generate_repo_aliases >| "${cache}"
-    load_file_if_exists "${cache}"
-    # ${(f)$(<file)} reads the file without a fork (zsh built-in) and splits on
-    # newlines; ${#...[@]} counts elements — no wc -l subprocess.
-    success "Repo aliases cache regenerated and loaded (${#${(f)$(<"${cache}")}[@]} aliases)"
-  }
+    is_directory "${PROJECTS_BASE_DIR}" || return 0
 
-  if is_directory "${PROJECTS_BASE_DIR}"; then
-    local repo_alias_cache="${XDG_CACHE_HOME}/repo-aliases.zsh"
+    local force=0
+    [[ "${1-}" == "-f" ]] && force=1
 
-    # Regenerate the cache if it is missing or PROJECTS_BASE_DIR has been
-    # modified more recently than the cache (new/removed top-level repo folder).
-    if ! is_file "${repo_alias_cache}" || [[ "${PROJECTS_BASE_DIR}" -nt "${repo_alias_cache}" ]]; then
-      [[ -n "${DEBUG+1}" ]] && debug "Regenerating repo aliases cache (stale or missing)"
-      _generate_repo_aliases >| "${repo_alias_cache}"
+    local repo_alias_cache="${XDG_CACHE_HOME}/repo-aliases-cache.zsh"
+
+    if ((force))   || ! is_file "${repo_alias_cache}" || [[ "${PROJECTS_BASE_DIR}" -nt "${repo_alias_cache}" ]]; then
+      ((force))     && info "Regenerating repo aliases cache..."
+      ((!force))    && [[ -n "${DEBUG+1}" ]] && debug "Regenerating repo aliases cache (stale or missing)"
+
+      local -A seen_parent_folders
+      local -a parent_folders
+
+      # Process substitution + :h (no forks per iteration); associative array deduplicates without sort -u.
+      while IFS= read -r p; do
+        local ancestor="${p:h:h}" # parent of .git = repo root; parent of that = first ancestor to check
+        while [[ "${ancestor}" != "${PROJECTS_BASE_DIR}" && "${ancestor}" != "/" ]]; do
+          if is_zero_string "${seen_parent_folders[$ancestor]}"; then
+            seen_parent_folders[$ancestor]=1
+            parent_folders+=("${ancestor}")
+          fi
+          ancestor="${ancestor:h}"
+        done
+      done < <(find "${PROJECTS_BASE_DIR}" -maxdepth 6 -type d -name '.git')
+
+      {
+        for folder_path in "${parent_folders[@]}"; do
+          local relative_path="${folder_path#${PROJECTS_BASE_DIR}/}"
+          # Alias name: strip base dir prefix and replace '/' with '-'
+          echo "alias ${relative_path//\//-}=\"FOLDER='${folder_path}' MAXDEPTH=4 rug\""
+        done
+      } >|"${repo_alias_cache}"
+
+      ((force))   && success "Repo aliases cache regenerated and loaded (${#${(f)$(<"${repo_alias_cache}")}[@]} aliases)"
     fi
 
-    # Source the cache — pure-zsh, no subprocesses.
     load_file_if_exists "${repo_alias_cache}"
-    unset repo_alias_cache
-  fi
+  }
+
+  regenerate_repo_aliases
 fi
 
 # --------------------------------------------------------------------------
@@ -160,17 +129,18 @@ fi
 # --------------------------------------------------------------------------
 
 # Deletes all compiled zsh bytecode (*.zwc*) files under HOME and HOMEBREW_PREFIX, and
-# removes the entire XDG_CACHE_HOME directory. All generated files are recreated
-# automatically on the next shell start or login shell.
+# removes the entire XDG_CACHE_HOME directory. Cache files (brew shellenv, starship init,
+# repo aliases, etc.) are recreated on the next shell start; *.zwc bytecode files are
+# recompiled only on the next login shell (via .zlogin).
 delete_caches() {
   # Delete all *.zwc* compiled zsh bytecode files under HOME and HOMEBREW_PREFIX so
   # they are recompiled fresh on the next login shell (via .zlogin).  This covers
   # compiled config files, scripts, autoload functions, and any *.zwc siblings of
   # the cache files below.
-  find "${HOME}" "${HOMEBREW_PREFIX}" \( -path '*/.git/*' -o -path '*/node_modules/*' -o -path '*/.mypy_cache/*' -o -path '*/__pycache__/*' \) -prune -o -maxdepth 6 -name '*.zwc*' -type f -print -delete || warn "find command failed in ${HOME} or ${HOMEBREW_PREFIX}"
+  find "${HOME}" "${HOMEBREW_PREFIX}" -maxdepth 10 \( -path '*/.git/*' -o -path '*/node_modules/*' -o -path '*/.mypy_cache/*' -o -path '*/__pycache__/*' \) -prune -o -name '*.zwc*' -type f -print -delete || warn "find command failed in ${HOME} or ${HOMEBREW_PREFIX}"
 
   # Delete the entire XDG_CACHE_HOME directory. This removes all generated cache
-  # files (brew-shellenv-cache.zsh, starship-init-cache.zsh, repo-aliases.zsh, zsh
+  # files (brew-shellenv-cache.zsh, starship-init-cache.zsh, repo-aliases-cache.zsh, zsh
   # completion dump, fast-syntax-highlighting theme cache, etc.) and their *.zwc
   # bytecode companions. They are all regenerated automatically on the next shell
   # start or login shell.
@@ -208,8 +178,17 @@ resurrect_tracked_repos() {
     all maintenance register --config-file "${HOME}/.gitconfig-oss.inc"
     all maintenance start
   fi
+  # Collect repo ancestor dirs once and share across both post-clone operations
+  # to avoid running the expensive find traversal twice.
+  local -a all_dirs
+  _collect_repo_ancestor_dirs
+  _SHARED_REPO_DIRS=("${all_dirs[@]}")
+
   allow_all_direnv_configs
   install_mise_versions
+
+  unset _SHARED_REPO_DIRS
+  regenerate_repo_aliases
 }
 
 # Populates the caller-declared 'all_dirs' array with deduplicated ancestor
@@ -218,7 +197,7 @@ resurrect_tracked_repos() {
 # Respects FIRST_INSTALL (caps search depth to 3 to speed up vanilla-OS runs).
 _collect_repo_ancestor_dirs() {
   local find_maxdepth=6
-  is_non_zero_string "${FIRST_INSTALL}" && find_maxdepth=3
+  is_non_zero_string "${FIRST_INSTALL:-}" && find_maxdepth=3
 
   local -A _seen_dirs=()
   all_dirs=()
@@ -226,7 +205,7 @@ _collect_repo_ancestor_dirs() {
   while IFS= read -r git_dir; do
     local dir="${git_dir:h}"  # strip the trailing /.git to get the repo root
     while [[ "${dir}" != "/" ]]; do
-      if is_zero_string "${_seen_dirs[$dir]}"; then
+      if is_zero_string "${_seen_dirs[$dir]:-}"; then
         _seen_dirs[$dir]=1
         all_dirs+=("${dir}")
       fi
@@ -247,7 +226,11 @@ install_mise_versions() {
   fi
 
   local -a all_dirs
-  _collect_repo_ancestor_dirs
+  if ((${+_SHARED_REPO_DIRS}))   && is_non_empty_array _SHARED_REPO_DIRS; then
+    all_dirs=("${_SHARED_REPO_DIRS[@]}")
+  else
+    _collect_repo_ancestor_dirs
+  fi
 
   # Sort by depth so parents come before children, then filter to dirs with mise configs
   local mise_configs=('.mise.toml' '.tool-versions' '.ruby-version' '.python-version' '.node-version' '.java-version' '.nvmrc')
@@ -274,7 +257,9 @@ install_mise_versions() {
   done
 
   if ${all_installed}; then
-    success 'All mise tools are already installed'
+    local -a display_dirs=()
+    for dir in "${sorted_dirs[@]}"; do display_dirs+=("'$(yellow "${dir}")'"); done
+    success "All mise tools are already installed:$(join_array display_dirs)"
     unset sorted_dirs all_dirs
     return
   fi
@@ -302,7 +287,11 @@ allow_all_direnv_configs() {
   fi
 
   local -a all_dirs
-  _collect_repo_ancestor_dirs
+  if ((${+_SHARED_REPO_DIRS}))   && is_non_empty_array _SHARED_REPO_DIRS; then
+    all_dirs=("${_SHARED_REPO_DIRS[@]}")
+  else
+    _collect_repo_ancestor_dirs
+  fi
 
   # Sort by depth so parents come before children, then filter to dirs with .envrc configs
   local -a sorted_dirs
@@ -317,7 +306,7 @@ allow_all_direnv_configs() {
   # Fast check — if nothing is missing across all dirs, skip entire processing loop
   local all_allowed=true
   for dir in "${sorted_dirs[@]}"; do
-    pushd "${dir}" &>/dev/null || { all_allowed=false; break }
+    pushd "${dir}" &>/dev/null || { all_allowed=false; break; }
     if ! direnv status &>/dev/null; then
       all_allowed=false
       popd &>/dev/null || true
@@ -327,7 +316,9 @@ allow_all_direnv_configs() {
   done
 
   if ${all_allowed}; then
-    success 'All direnv configs are already allowed'
+    local -a display_dirs=()
+    for dir in "${sorted_dirs[@]}"; do display_dirs+=("'$(yellow "${dir}")'"); done
+    success "All direnv configs are already allowed:$(join_array display_dirs)"
     unset sorted_dirs all_dirs
     return
   fi
@@ -346,7 +337,7 @@ allow_all_direnv_configs() {
 }
 
 # --------------------------------------------------------------------------
-# 3f. macOS-specific utilities
+# 3f. Network utilities (macOS + Linux)
 # --------------------------------------------------------------------------
 
 # Spoofs the MAC address of the given network interface to a random value, which can
@@ -355,9 +346,9 @@ allow_all_direnv_configs() {
 # Usage: _free_wifi <interface>  (called via the free_wifi alias, e.g. free_wifi en0)
 _free_wifi() {
   local interface="${1}"
-  (ifconfig "${interface}" | \grep ether) && \
-  (openssl rand -hex 6 | sed 's/\(..\)/\1:/g; s/.$//' | xargs sudo ifconfig "${interface}" ether) && \
-  (ifconfig "${interface}" | \grep ether)
+  (ifconfig "${interface}" | \grep ether) &&
+    (openssl rand -hex 6 | sed 's/\(..\)/\1:/g; s/.$//' | xargs sudo ifconfig "${interface}" ether) &&
+    (ifconfig "${interface}" | \grep ether)
 }
 
 if is_macos; then
@@ -387,7 +378,9 @@ if is_macos; then
   # Usage: find_and_append_prefs <search-string>
   find_and_append_prefs() {
     local file_name="${DOTFILES_DIR}/scripts/data/capture-prefs-domains.txt"
-    defaults find "${1}" | \grep 'keys in domain' | cut -d"'" -f2 >> "${file_name}"
+    defaults find "${1}" | \grep 'keys in domain' | while IFS="'" read -r _ field _; do
+      print -- "${field}" >>"${file_name}"
+    done
     sort -u -o "${file_name}" "${file_name}"
     unset file_name
   }
@@ -452,7 +445,7 @@ if command_exists docker; then
     # 2. You should see list of files in build context
     # 3. If unwanted files are present, adjust the '.dockerignore' file and go back to step 1
 
-    cat <<EOF > Dockerfile.build-context
+    cat <<EOF >Dockerfile.build-context
   FROM busybox
   COPY . /build-context
   WORKDIR /build-context
@@ -563,17 +556,17 @@ _create_crontab() {
   debug 'Creating crontab.txt'
   local file="${1}"
 
-  echo '# Reference: https://crontab.guru/' > "${file}"
-  echo >> "${file}"
-  echo "# Note: 'chronic' is a utility installed using 'moreutils' from homebrew and is needed so that a successful run of any cron job does not cause a mail to get generated unless in case of error scenarios" >> "${file}"
-  echo >> "${file}"
-  echo '# Env' >> "${file}"
-  echo "SHELL=\"${SHELL}\"" >> "${file}"
-  echo "USERNAME=\"${USERNAME}\"" >> "${file}"
-  echo "HOME=\"${HOME}\"" >> "${file}"
-  echo "PATH=${HOMEBREW_PREFIX}/bin:/usr/bin:/bin  # Needed for chronic to be in the PATH" >> "${file}"
-  echo >> "${file}"
-  echo "0   */2   *   *   *   chronic zsh -lsc \"${DOTFILES_DIR}/scripts/software-updates-cron.sh | tee -a ${HOME}/software-updates-cron.log\"" >> "${file}"
+  echo '# Reference: https://crontab.guru/' >"${file}"
+  echo >>"${file}"
+  echo "# Note: 'chronic' is a utility installed using 'moreutils' from homebrew and is needed so that a successful run of any cron job does not cause a mail to get generated unless in case of error scenarios" >>"${file}"
+  echo >>"${file}"
+  echo '# Env' >>"${file}"
+  echo "SHELL=\"${SHELL}\"" >>"${file}"
+  echo "USERNAME=\"${USERNAME}\"" >>"${file}"
+  echo "HOME=\"${HOME}\"" >>"${file}"
+  echo "PATH=${HOMEBREW_PREFIX}/bin:/usr/bin:/bin  # Needed for chronic to be in the PATH" >>"${file}"
+  echo >>"${file}"
+  echo "0   */2   *   *   *   chronic zsh -lsc \"${DOTFILES_DIR}/scripts/software-updates-cron.sh | tee -a ${HOME}/software-updates-cron.log\"" >>"${file}"
 }
 
 # Regenerates crontab from scratch using the canonical crontab.txt template.
@@ -592,12 +585,14 @@ recron() {
 #
 # Example: with_cron_suspended _push "$@"
 with_cron_suspended() {
-  local fn="${1}"; shift
+  local fn="${1}"
+  shift
   trap 'resume_cron' EXIT
   suspend_cron
   "${fn}" "$@"
   recron
   rm -f "${CRON_BACKUP_FILE}"
+  trap - EXIT
 }
 
 # --------------------------------------------------------------------------

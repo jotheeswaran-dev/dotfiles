@@ -2,6 +2,35 @@ As documented in the README's [adopting](README.md#how-to-adoptcustomize-the-scr
 
 For those who follow this repo, here's the changelog for ease of changelog:
 
+### 3.0.27
+
+* *[.shellrc]* Fixed `${(j.:.)RUBYLIB_PATHS}` bad substitution error when sourced by non-zsh runtimes (e.g. direnv). Wrapped the `RUBYLIB` block in `is_zsh` guard; updated comment to explain the direnv/bash incompatibility.
+* *[.shellrc]* Added `RUBYLIB` setup to point to `scripts/utilities/` so Ruby scripts can `require` shared utilities by name without `require_relative`.
+* *[.aliases]* Refactored `regenerate_repo_aliases` into a single public function (removed separate `_generate_repo_aliases`): accepts optional `-f` flag to force-rebuild; always sources the cache at the end; prints progress only when `-f` is given. Renamed cache file from `repo-aliases.zsh` to `repo-aliases-cache.zsh` for consistency with other cache files.
+* *[.aliases]* `resurrect_tracked_repos`: collect repo ancestor dirs once via `_collect_repo_ancestor_dirs` and share via `_SHARED_REPO_DIRS` across both `allow_all_direnv_configs` and `install_mise_versions` calls (avoids running the expensive `find` traversal twice, but otherwise fall back to `_collect_repo_ancestor_dirs` if that's not set.); call `regenerate_repo_aliases` at the end; unset `_SHARED_REPO_DIRS` when done.
+* *[.aliases]* Moved `is_aliases_sourced` function definition to immediately after the re-source guard (before `source "${HOME}/.shellrc"`), mirroring the `is_shellrc_sourced` placement in `.shellrc`.
+* *[.aliases]* Added GROUP 3 header clarification: `(Groups 1 and 2 are defined in .shellrc — bootstrap utilities and core predicates.)`.
+* *[scripts/install-dotfiles.rb, scripts/resurrect-repositories.rb]* Added `$LOAD_PATH.unshift(File.join(__dir__, 'utilities'))` to both scripts — ensures shared utilities are loadable regardless of whether `RUBYLIB` is set (necessary during `FIRST_INSTALL` where the dotfiles repo is cloned after `.shellrc` is first sourced). Switched `require_relative 'utilities/logging'` → `require 'logging'` in both scripts.
+* *[scripts/install-dotfiles.rb]* Replaced inline `OptionParser` block with `CliParser.parse` from the new shared `cli_parser` utility.
+* *[scripts/utilities/cli_parser.rb, scripts/utilities/hash_ext.rb, scripts/utilities/path_utils.rb]* New shared Ruby utilities. `cli_parser` wraps `OptionParser` with standard error handling and `--help`; `hash_ext` extends `Hash` with `deep_sort`; `path_utils` exposes `extract_path_segment_at(folder, index)` extracts a path component by index (no subprocess fork).
+* *[scripts/utilities/logging.rb]* Refactored `terminal_width` to avoid `||= begin...end` pattern (rufo formatter instability); updated usage comment from `require_relative` to `require`.
+* *[scripts/software-updates-cron.sh]* Renamed `perform_update` → `_perform_update` (private convention). Replaced `[[ ${#array[@]} -gt 0 ]]` with `is_non_empty_array` in two places. Fixed stale `unset cutoff_epoch` → `unset cutoff_date`. Added comment on the `twilight` tag removal block. Changed `strftime` arithmetic to `$((…))` (shfmt style). Removed stale `# Re-source guard` comment above `source "${HOME}/.shellrc"`.
+* *[scripts/setup-login-item.sh]* Replaced `osascript | \grep -i` pipeline with zsh glob pattern match `${${(M)${(f)all_login_items}:#(#i)*${app_name}*}[1]}`.
+* *[Brewfile]* Uncommented `shfmt` — now an explicit dependency.
+* *[all eligible shell and Ruby scripts]* Reformatted using `shfmt` (shell/zsh) and `rufo` (Ruby) per `.editorconfig` rules.
+* *[.shfmtignore]* New file. Excludes `.zshrc` and `cleanup-browser-profiles.sh` (unparseable zsh-only syntax), and `.shellrc` and `.aliases` (`keep_padding` expands intentional one-liners).
+
+#### Adopting these changes
+
+* Rebase from upstream, resolve conflicts, and then run in all open terminals:
+
+  ```bash
+  rm -rf "${HOME}/.default-gems"
+  install-dotfiles.rb
+  ```
+
+* Quit and restart the Terminal application (a full restart is required — sourcing in-place leaves old OMZ functions in memory).
+
 ### 3.0.26
 
 * *[.shellrc, .aliases]* Centralised the re-source guard inside each file itself — all call sites now source unconditionally (no more per-call `(( $+functions[...] )) ||` guards). All custom zsh git commands (`cc`, `count`, `pull`, `push`, `st`, `status_all_repos`, `update_all_repos`, `upreb`) updated accordingly. Sourcing of these 2 files is now refined/tightened without duplication.

@@ -15,7 +15,9 @@ ohmyzsh/ohmyzsh path:lib/correction.zsh
 ohmyzsh/ohmyzsh path:lib/key-bindings.zsh
 ohmyzsh/ohmyzsh path:lib/misc.zsh
 ohmyzsh/ohmyzsh path:lib/termsupport.zsh
-ohmyzsh/ohmyzsh path:lib/theme-and-appearance.zsh
+# theme-and-appearance.zsh removed: its only job is setting up `ls --color` aliases,
+# which are immediately overridden by the eza plugin anyway. Removing it saves ~5ms
+# by eliminating the test-ls-args fork (ls /dev/null) on every shell startup.
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Oh-My-Zsh plugins — only the ones actively used

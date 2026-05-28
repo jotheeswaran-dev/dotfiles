@@ -10,8 +10,13 @@
 # calls return non-zero when a setting is unsupported on the current OS version,
 # which is expected and must not abort the script.
 
-# Re-source guard is inside .shellrc itself — safe to call unconditionally.
 source "${HOME}/.shellrc"
+_SCRIPT_NAME="${0:t}"
+
+usage() {
+  print_usage "${1}" \
+    "$(yellow '[-s]') --> $(yellow '-s') (optional) Run in silent/auto mode without interactive prompts"
+}
 
 # Script-level flag for silent mode; set by main() when -s is passed
 auto='N'
@@ -20,16 +25,20 @@ auto='N'
 ask() {
   local prompt default yn=''
   while true; do
-    if [[ "${2}" == 'Y' ]]; then
-      prompt="$(green 'Y')/n"
-      default='Y'
-    elif [[ "${2}" == 'N' ]]; then
-      prompt="y/$(green 'N')"
-      default='N'
-    else
-      prompt='y/n'
-      default=
-    fi
+    case "${2}" in
+      'Y')
+        prompt="$(green 'Y')/n"
+        default='Y'
+        ;;
+      'N')
+        prompt="y/$(green 'N')"
+        default='N'
+        ;;
+      *)
+        prompt='y/n'
+        default=
+        ;;
+    esac
 
     printf "%s" "${1} [${prompt}] "
 
@@ -59,8 +68,8 @@ main() {
         auto='Y'
         ;;
       \?)
-        error "Invalid option: -${OPTARG}" >&2
-        exit 1
+        warn "-${OPTARG} is not a valid option"
+        usage "${_SCRIPT_NAME}"
         ;;
     esac
   done

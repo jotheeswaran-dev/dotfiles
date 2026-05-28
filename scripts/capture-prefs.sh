@@ -13,14 +13,13 @@
 # Exit immediately if a command exits with a non-zero status.
 set -euo pipefail
 
-# Re-source guard is inside .shellrc itself — safe to call unconditionally.
 source "${HOME}/.shellrc"
+_SCRIPT_NAME="${0:t}"
 
 usage() {
-  echo "$(red 'Usage'): $(yellow "${${(%):-%x}##*/}") [-e|-i]"
-  echo "  $(yellow '-e')  --> Export from [old] system"
-  echo "  $(yellow '-i')  --> Import into [new] system"
-  exit 1
+  print_usage "${1}" \
+    "$(yellow '-e') --> (mandatory; mutually exclusive with -i) Export preferences from the current [old] system into the dotfiles repo" \
+    "$(yellow '-i') --> (mandatory; mutually exclusive with -e) Import preferences from the dotfiles repo into the current [new] system"
 }
 
 main() {
@@ -34,14 +33,16 @@ main() {
         operation='import'
         ;;
       \?)
-        usage
+        warn "-${OPTARG} is not a valid option"
+        usage "${_SCRIPT_NAME}"
         ;;
     esac
   done
   shift $((OPTIND - 1))
 
   if is_zero_string "${operation}"; then
-    usage
+    warn "Missing required arguments/switches"
+    usage "${_SCRIPT_NAME}"
   fi
 
   is_zero_string "${PERSONAL_CONFIGS_DIR}" && error "Required env var '$(yellow 'PERSONAL_CONFIGS_DIR')' is not defined."
@@ -68,8 +69,8 @@ main() {
   while IFS= read -r _line; do
     [[ "${_line}" =~ '^[[:space:]]*#' || -z "${_line//[[:space:]]/}" ]] && continue
     app_array+=("${_line}")
-  done < "${domains_file}"
-  if [[ ${#app_array[@]} -eq 0 ]]; then
+  done <"${domains_file}"
+  if is_empty_array app_array; then
     warn "No domains found in '$(yellow "${domains_file}")'. Nothing to do."
     exit 0
   fi

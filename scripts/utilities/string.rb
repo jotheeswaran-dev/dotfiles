@@ -34,6 +34,7 @@ class String
 
     "\x1b[#{code}m#{replace_home_path_with_tilde}\x1b[0m"
   end
+
   private :colorize
 
   # Replaces the expanded HOME path with '~' to produce a shorter, human-readable path.
@@ -51,50 +52,50 @@ class String
   end
 
   # @return [String] The string in black.
-  def black;        colorize('0;30'); end
+  def black; colorize('0;30'); end
 
   # @return [String] The string in dark gray.
-  def dark_gray;    colorize('1;30'); end
+  def dark_gray; colorize('1;30'); end
 
   # @return [String] The string in red.
-  def red;          colorize('0;31'); end
+  def red; colorize('0;31'); end
 
   # @return [String] The string in light red.
-  def light_red;    colorize('1;31'); end
+  def light_red; colorize('1;31'); end
 
   # @return [String] The string in green.
-  def green;        colorize('0;32'); end
+  def green; colorize('0;32'); end
 
   # @return [String] The string in light green.
-  def light_green;  colorize('1;32'); end
+  def light_green; colorize('1;32'); end
 
   # @return [String] The string in orange.
-  def orange;       colorize('0;33'); end
+  def orange; colorize('0;33'); end
 
   # @return [String] The string in yellow.
-  def yellow;       colorize('1;33'); end
+  def yellow; colorize('1;33'); end
 
   # @return [String] The string in blue.
-  def blue;         colorize('0;34'); end
+  def blue; colorize('0;34'); end
 
   # @return [String] The string in light blue.
-  def light_blue;   colorize('1;34'); end
+  def light_blue; colorize('1;34'); end
 
   # @return [String] The string in purple.
-  def purple;       colorize('0;35'); end
+  def purple; colorize('0;35'); end
 
   # @return [String] The string in light purple.
   def light_purple; colorize('1;35'); end
 
   # @return [String] The string in cyan.
-  def cyan;         colorize('0;36'); end
+  def cyan; colorize('0;36'); end
 
   # @return [String] The string in light cyan.
-  def light_cyan;   colorize('1;36'); end
+  def light_cyan; colorize('1;36'); end
 
   # @return [String] The string in light gray.
-  def light_gray;   colorize('0;37'); end
+  def light_gray; colorize('0;37'); end
 
   # @return [String] The string in white.
-  def white;        colorize('1;37'); end
+  def white; colorize('1;37'); end
 end

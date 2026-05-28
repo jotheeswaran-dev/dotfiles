@@ -45,6 +45,11 @@ unset ZSH ZSH_CUSTOM
 load_file_if_exists "${ANTIDOTE_ZSH}"
 
 # Plugin option variables must be set before the bundle is sourced.
+# Pre-set iterm2_hostname to zsh's native $HOST (set from uname -n at shell init — no subprocess).
+# The iterm2 shell integration checks [ -z "${iterm2_hostname:-}" ] and forks `hostname -f` if unset.
+# $HOST equals `hostname -f` on macOS and avoids the ~4ms subprocess cost on every shell start.
+iterm2_hostname="${HOST}"
+
 # zsh-autosuggestions strategy
 export ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 # eza plugin: enable icons
@@ -59,17 +64,22 @@ export ENABLE_CORRECTION='true'
 # The cache pre-evaluates path_helper so sourcing it is a pure-zsh operation (no subprocesses).
 () {
   local brew_bin="${HOMEBREW_PREFIX}/bin/brew"
-  local cache_file="${XDG_CACHE_HOME}/brew-shellenv-cache.zsh"
+  local brew_shellenv_cache="${XDG_CACHE_HOME}/brew-shellenv-cache.zsh"
   # Use the brew binary's modification time as cache key (no need to run brew at all for the check)
-  if ! is_file "${cache_file}" || [[ "${brew_bin}" -nt "${cache_file}" ]]; then
+  if ! is_file "${brew_shellenv_cache}" || [[ "${brew_bin}" -nt "${brew_shellenv_cache}" ]]; then
+    # Skip cache generation if brew is not yet installed (e.g. vanilla OS first-install)
+    if ! is_executable "${brew_bin}"; then
+      load_file_if_exists "${brew_shellenv_cache}"
+      return
+    fi
     # Run brew shellenv in a subshell to get brew vars + path_helper result without polluting current PATH
     local brew_cellar brew_repo brew_infopath brew_manpath brew_prefix
     eval "$("${brew_bin}" shellenv 2>/dev/null)"
     brew_prefix="${HOMEBREW_PREFIX}"
-    brew_cellar="${HOMEBREW_CELLAR}"
-    brew_repo="${HOMEBREW_REPOSITORY}"
-    brew_infopath="${INFOPATH}"
-    brew_manpath="${MANPATH}"
+    brew_cellar="${HOMEBREW_CELLAR:-}"
+    brew_repo="${HOMEBREW_REPOSITORY:-}"
+    brew_infopath="${INFOPATH:-}"
+    brew_manpath="${MANPATH:-}"
     # Write a static cache: static exports + fpath update (no subprocess calls when cache is sourced)
     {
       echo "export HOMEBREW_PREFIX='${brew_prefix}';"
@@ -81,9 +91,9 @@ export ENABLE_CORRECTION='true'
       # Exporting FPATH leaks it into child processes and launchd user-session environment;
       # typeset +x at the bottom of this file strips the export flag after all sources.
       echo "fpath=('${brew_prefix}/share/zsh/site-functions' \"\${fpath[@]}\");"
-    } >| "${cache_file}" 2>/dev/null
+    } >| "${brew_shellenv_cache}" 2>/dev/null
   fi
-  load_file_if_exists "${cache_file}"
+  load_file_if_exists "${brew_shellenv_cache}"
 }
 
 load_file_if_exists "${HOMEBREW_PREFIX}/opt/git-extras/share/git-extras/git-extras-completion.zsh"
@@ -100,6 +110,24 @@ export ZSH_COMPDUMP="${XDG_CACHE_HOME}/zcompdump"
     compinit -d "${ZSH_COMPDUMP}"
   fi
 }
+
+# Pre-set git_version to skip the `git version` subprocess fork inside the OMZ git plugin.
+# git.plugin.zsh line 3 runs: git_version="${${(As: :)$(git version 2>/dev/null)}[3]}"
+# and uses it for 4 conditional alias decisions (thresholds 2.8, 2.13, 2.30).
+# Since git is always well above those thresholds on this machine, we cache the version
+# string keyed on the git binary mtime — the same mtime-invalidation pattern used for
+# brew shellenv, mise activate, and starship init. Saves ~14ms on every shell startup.
+if command_exists git; then
+  () {
+    local git_bin="${commands[git]}"
+    local git_version_cache="${XDG_CACHE_HOME}/git-version-cache.zsh"
+    if ! is_file "${git_version_cache}" || [[ "${git_bin}" -nt "${git_version_cache}" ]]; then
+      local ver="${${(As: :)$(git version 2>/dev/null)}[3]}"
+      echo "git_version=\"${ver}\"" >| "${git_version_cache}" 2>/dev/null
+    fi
+    load_file_if_exists "${git_version_cache}"
+  }
+fi
 
 # Source the pre-generated antidote static bundle.
 # On a vanilla OS (before brew installs antidote) this file is present because
@@ -126,11 +154,11 @@ export ZSH_COMPDUMP="${XDG_CACHE_HOME}/zcompdump"
 if command_exists mise; then
   () {
     local mise_bin="${commands[mise]}"
-    local cache="${XDG_CACHE_HOME}/mise-activate-cache.zsh"
-    if ! is_file "${cache}" || [[ "${mise_bin}" -nt "${cache}" ]]; then
-      mise activate zsh >| "${cache}" 2>/dev/null
+    local mise_activate_cache="${XDG_CACHE_HOME}/mise-activate-cache.zsh"
+    if ! is_file "${mise_activate_cache}" || [[ "${mise_bin}" -nt "${mise_activate_cache}" ]]; then
+      mise activate zsh >| "${mise_activate_cache}" 2>/dev/null
     fi
-    load_file_if_exists "${cache}"
+    load_file_if_exists "${mise_activate_cache}"
   }
 fi
 
@@ -143,7 +171,8 @@ fi
 #
 # NOTE: Deferring the source of the cache via a precmd hook was attempted but
 # causes 'setopt promptsubst' (emitted by starship's init) to be scoped to the
-# precmd function and unset on return (due to 'setopt local_options' in .zshrc),
+# precmd function and unset on return (due to 'setopt local_options' set in the
+# macOS block of .zshrc, which scopes all setopts to the file's execution frame),
 # which leaves PROMPT as an unexpanded literal string after the first command.
 # The cache is therefore sourced directly at startup; the ~5ms cost of sourcing
 # the pre-parsed .zwc bytecode is acceptable.
@@ -151,14 +180,14 @@ if command_exists starship; then
   () {
     # $commands[] is an O(1) zsh hash lookup — no subprocess fork needed.
     local starship_bin="${commands[starship]}"
-    local cache="${XDG_CACHE_HOME}/starship-init-cache.zsh"
+    local starship_init_cache="${XDG_CACHE_HOME}/starship-init-cache.zsh"
     # Regenerate the cache only when the starship binary is newer than the cache file.
-    if ! is_file "${cache}" || [[ "${starship_bin}" -nt "${cache}" ]]; then
-      starship init zsh >| "${cache}" 2>/dev/null
+    if ! is_file "${starship_init_cache}" || [[ "${starship_bin}" -nt "${starship_init_cache}" ]]; then
+      starship init zsh >| "${starship_init_cache}" 2>/dev/null
     fi
     # Source directly at the top level (not deferred) so that 'setopt promptsubst'
     # emitted by the cache takes effect globally and is not scoped to a function.
-    load_file_if_exists "${cache}"
+    load_file_if_exists "${starship_init_cache}"
   }
 fi
 
@@ -170,7 +199,7 @@ fi
 
 unset EDITOR
 # Preferred editor for remote sessions
-if is_non_zero_string "${SSH_CONNECTION}"; then
+if is_non_zero_string "${SSH_CONNECTION:-}"; then
   export EDITOR='vi'
 else
   # Preferred editor for local sessions
@@ -381,6 +410,9 @@ fi
 # remove empty components to avoid '::' ending up + resulting in './' being in $PATH, etc
 path=( "${path[@]:#}" )
 fpath=( "${fpath[@]:#}" )
+# zsh does not auto-tie INFOPATH<->infopath (unlike PATH<->path); ensure the tie exists
+# so that the array form is available. typeset -T is safe to call even if already tied.
+typeset -gT INFOPATH infopath ':'
 infopath=( "${infopath[@]:#}" )
 manpath=( "${manpath[@]:#}" )
 
@@ -391,8 +423,8 @@ typeset -gU cdpath CPPFLAGS cppflags FPATH fpath infopath LDFLAGS ldflags MANPAT
 # (autoload search path and cd search path respectively). Exporting them causes their
 # contents to leak into child processes and persist in the macOS launchd user-session
 # environment, where they are inherited by every new shell before any rc file runs.
-# All other *path vars on line 367 (PATH, MANPATH, INFOPATH, CPPFLAGS, LDFLAGS,
-# PKG_CONFIG_PATH) are intentionally exported — child processes need them.
+# All other *path vars in the typeset -gU line above (PATH, MANPATH, INFOPATH, CPPFLAGS,
+# LDFLAGS, PKG_CONFIG_PATH) are intentionally exported — child processes need them.
 typeset +x FPATH fpath cdpath CDPATH
 
 # for profiling zsh, see: https://unix.stackexchange.com/a/329719/27109

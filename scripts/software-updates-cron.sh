@@ -2,19 +2,21 @@
 
 # vim:filetype=zsh syntax=zsh tabstop=2 shiftwidth=2 softtabstop=2 expandtab autoindent fileencoding=utf-8
 
-# This script is used to run the update steps in sequence. (the main point to note is that the natsumi codebase has to be rebased without any conflicts and pushed to the remote so that the runtime ZenProfile chrome directory can be updated to a known working state)
-# These are commands that need to be periodically run to upgrade any installed softwares. Rather than remembering each tool and its specific command invocation, this script comes handy.
+# This script is used to run the update steps in sequence.
+# These are commands that need to be periodically run to upgrade any installed softwares.
+# Rather than remembering each tool and its specific command invocation, this script comes handy.
 
 # Do not exit immediately if a command exits with a non-zero status since this is run within a cronjob
 
-# Re-source guard is inside .shellrc itself — safe to call unconditionally.
-source "${HOME}/.shellrc"
+_SCRIPT_NAME="${0:t}"
+
+source "${HOME}/.aliases"
 # This script is invoked from cron, which starts a minimal bash environment.
 # load_zsh_configs must be called explicitly to bring all zsh configs into scope.
 load_zsh_configs
 
 # Run a single update step if the check command is available
-perform_update() {
+_perform_update() {
   local title="${1}"
   local check_cmd="${2}"
   local update_cmd="${3}"
@@ -37,7 +39,7 @@ main() {
   # Capture start epoch into both a local variable and SCRIPT_START_TIMES.
   # The local is passed explicitly to print_script_duration at the end of main.
   # SCRIPT_START_TIMES is used by step_end (called throughout this script via
-  # perform_update) to compute the "total elapsed" column independently of the
+  # _perform_update) to compute the "total elapsed" column independently of the
   # local variable.  Both are required; see the design note above
   # step_timing_init in .shellrc.
   local script_start_time
@@ -47,15 +49,15 @@ main() {
   print_script_start
 
   # brew doctor # Removed for cron job efficiency
-  perform_update 'brews' 'brew' 'brew bundle check || brew bundle'
+  _perform_update 'brews' 'brew' 'brew bundle check || brew bundle'
 
   # This is typically run only in the ${HOME} folder so as to upgrade the software versions in the "global" sense
-  perform_update 'mise plugins' 'mise' 'mise plugins update && mise upgrade --bump' # && mise prune --tools --dry-run'
+  _perform_update 'mise plugins' 'mise' 'mise plugins update && mise upgrade --bump' # && mise prune --tools --dry-run'
 
-  perform_update 'tldr database' 'tldr' 'tldr --update'
+  _perform_update 'tldr database' 'tldr' 'tldr --update'
 
   # 'ignore-io' updates the data from http://gitignore.io so that we can generate the '.gitignore' file contents from the cmd-line
-  perform_update 'git-ignore database' 'git-ignore-io' 'git ignore-io --update-list'
+  _perform_update 'git-ignore database' 'git-ignore-io' 'git ignore-io --update-list'
 
   # Update antidote plugins and regenerate the static bundle
   step_start
@@ -63,7 +65,7 @@ main() {
   update_antidote_and_regenerate_plugin_bundle
   step_end
 
-  perform_update 'claude-code' 'claude' 'claude update'
+  _perform_update 'claude-code' 'claude' 'claude update'
 
   # Commenting out since I have started using rapidfox user.js settings
   # local firefox_profiles="${PERSONAL_PROFILES_DIR}/FirefoxProfile/Profiles/DefaultProfile"
@@ -106,6 +108,8 @@ main() {
   if is_git_repo "${zen_browser_desktop_codebase}"; then
     step_start
     section_header "$(yellow "Remove 'twilight' tag from") $(purple 'zen-browser-desktop') repo"
+    # Only delete the stale tag here (no rebase); upreb-zen-browser-desktop.sh
+    # mirrors this logic and additionally runs _upreb when called interactively.
     if git -C "${zen_browser_desktop_codebase}" rev-parse -q --verify refs/tags/twilight &>/dev/null; then
       git -C "${zen_browser_desktop_codebase}" delete-tag twilight && success "Deleted 'twilight' tag."
     fi
@@ -137,7 +141,7 @@ main() {
 
   step_start
   section_header "$(yellow 'Upreb repos in oss folder')"
-  FOLDER="${PROJECTS_BASE_DIR}/oss" rug upreb && success 'Finished upreb for oss repos' || warn 'Failed to upreb oss repos'
+  oss upreb && success 'Finished upreb for oss repos' || warn 'Failed to upreb oss repos'
   step_end
 
   step_start
@@ -151,7 +155,7 @@ main() {
     local cutoff_date file_date
     # Compute cutoff date string (7 days ago) using pure zsh arithmetic + strftime.
     # YYYY-MM-DD strings sort lexicographically, so string comparison is correct.
-    strftime -s cutoff_date '%Y-%m-%d' $(( EPOCHSECONDS - 7 * 24 * 3600 ))
+    strftime -s cutoff_date '%Y-%m-%d' $((EPOCHSECONDS - 7 * 24 * 3600))
     # Pattern: zen-sessions-backup/zen-sessions-YYYY-MM-DD-HH.jsonlz4
     local -a old_backups=()
     while IFS= read -r tracked_file; do
@@ -164,7 +168,7 @@ main() {
       fi
     done < <(git -C "${PERSONAL_PROFILES_DIR}" ls-files -- '*/zen-sessions-backup/zen-sessions-*.jsonlz4')
 
-    if [[ ${#old_backups[@]} -gt 0 ]]; then
+    if is_non_empty_array old_backups; then
       for f in "${old_backups[@]}"; do
         git -C "${PERSONAL_PROFILES_DIR}" rm --cached -q -- "${f}" && debug "Unpinned old session backup: $(yellow "${f}")"
       done
@@ -172,7 +176,7 @@ main() {
     else
       debug 'No old session backups to prune'
     fi
-    unset cutoff_epoch old_backups
+    unset cutoff_date old_backups
   else
     debug "Skipping session backup pruning — not a git repo: '$(yellow "${PERSONAL_PROFILES_DIR}")'"
   fi
@@ -180,12 +184,20 @@ main() {
 
   step_start
   section_header "$(yellow 'Update home and profiles repos')"
-  update_all_repos && success 'Finished updating home and profiles repos' || warn 'Failed to update home and profiles repos'
+  # update_all_repos is defined in a standalone zsh script (not in .shellrc/.aliases);
+  # source it directly so the function and its helpers are available in this shell.
+  # Note: load_file_if_exists is intentionally NOT used here — these files are required,
+  # not optional; a missing file should fail loudly rather than silently no-op.
+  source "${XDG_CONFIG_HOME}/zsh/update_all_repos" && success 'Finished updating home and profiles repos' || warn 'Failed to update home and profiles repos'
   step_end
 
   step_start
   section_header "$(yellow 'Report status of all repos')"
-  status_all_repos
+  # status_all_repos is defined in a standalone zsh script (not in .shellrc/.aliases);
+  # source it directly so the function and its helpers are available in this shell.
+  # Note: load_file_if_exists is intentionally NOT used here — these files are required,
+  # not optional; a missing file should fail loudly rather than silently no-op.
+  source "${XDG_CONFIG_HOME}/zsh/status_all_repos"
   step_end
 
   step_start
@@ -194,7 +206,7 @@ main() {
   # (N) nullglob: if no match, the pattern expands to nothing
   # (/): only match directories
   local chrome_folders=("${PERSONAL_PROFILES_DIR}"/*Profile/Profiles/DefaultProfile/chrome(N/))
-  if [[ ${#chrome_folders[@]} -gt 0 ]]; then
+  if is_non_empty_array chrome_folders; then
     for folder in "${chrome_folders[@]}"; do
       if is_git_repo "${folder}"; then
         section_header2 "$(yellow 'Updating chrome folder:') $(purple "${folder}")"

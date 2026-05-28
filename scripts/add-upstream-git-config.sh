@@ -8,33 +8,13 @@
 # Exit immediately if a command exits with a non-zero status.
 set -euo pipefail
 
-# Re-source guard is inside .shellrc itself — safe to call unconditionally.
 source "${HOME}/.shellrc"
+_SCRIPT_NAME="${0:t}"
 
 usage() {
-  echo "$(red 'Usage'): $(yellow "${${(%):-%x}##*/}") -d <target-folder> -u <upstream-repo-owner>"
-  echo "  $(yellow '-d <target-folder>')       --> (mandatory) The folder which has to be processed"
-  echo "  $(yellow '-u <upstream-repo-owner>') --> (mandatory) The upstream repo's owner"
-  exit 1
-}
-
-# Returns the fetch URL for the named remote in the given folder, or an empty string if the
-# remote does not exist. Prints an error and returns 1 if the remote exists but its URL cannot
-# be retrieved.
-# Usage: get_remote_url <folder> <remote-name>
-get_remote_url() {
-  local folder="${1}" remote_name="${2}"
-  local remote_url=''
-  # Note: avoid `git remote | grep -q` under set -o pipefail — grep -q exits after the
-  # first match, sending SIGPIPE to git (exit 141); pipefail surfaces that instead of
-  # grep's 0, inverting the condition. $() buffers all output first, avoiding SIGPIPE.
-  if [[ -n "$(git -C "${folder}" remote 2>/dev/null | grep "^${remote_name}$")" ]]; then
-    if ! remote_url=$(git -C "${folder}" remote get-url "${remote_name}" 2>/dev/null); then
-      error "Could not retrieve URL for remote '${remote_name}' in '$(yellow "${folder}")'. Does the remote exist?"
-      return 1
-    fi
-  fi
-  echo "${remote_url}"
+  print_usage "${1}" \
+    "$(yellow '-d <target-folder>')       --> (mandatory) The folder which has to be processed" \
+    "$(yellow '-u <upstream-repo-owner>') --> (mandatory) The upstream repo's owner"
 }
 
 main() {
@@ -50,18 +30,20 @@ main() {
         upstream_repo_owner="${OPTARG}"
         ;;
       \?)
-        usage
+        warn "-${OPTARG} is not a valid option"
+        usage "${_SCRIPT_NAME}"
         ;;
       :)
-        echo "Invalid option: -${OPTARG} requires an argument" 1>&2
-        usage
+        warn "-${OPTARG} requires an argument"
+        usage "${_SCRIPT_NAME}"
         ;;
     esac
   done
   shift $((OPTIND - 1))
 
   if is_zero_string "${target_folder}" || is_zero_string "${upstream_repo_owner}"; then
-    usage
+    warn "Missing required arguments/switches"
+    usage "${_SCRIPT_NAME}"
   fi
 
   debug "$(yellow 'Adding new upstream to'): '$(purple "${target_folder}")'"
@@ -73,21 +55,17 @@ main() {
 
   # Check if an 'upstream' remote already exists
   local existing_upstream
-  existing_upstream="$(get_remote_url "${target_folder}" upstream)"
+  existing_upstream="$(get_git_config_value remote.upstream.url "${target_folder}")"
   if is_non_zero_string "${existing_upstream}"; then
     warn "Remote 'upstream' already exists for the repo in '$(yellow "${target_folder}")': '$(yellow "${existing_upstream}")'"
     return 0 # Success, nothing to do
   fi
 
-  # Get the URL of the 'origin' remote using 'git remote get-url'
+  # Get the URL of the 'origin' remote
   local origin_remote_url
-  if ! origin_remote_url="$(get_remote_url "${target_folder}" origin)"; then
-    error "Could not retrieve URL for remote 'origin' in '$(yellow "${target_folder}")'. Does the remote exist?"
-    return 1
-  fi
-
+  origin_remote_url="$(get_git_config_value remote.origin.url "${target_folder}")"
   if is_zero_string "${origin_remote_url}"; then
-    error "Retrieved empty URL for remote 'origin' in '$(yellow "${target_folder}")'."
+    error "Could not retrieve URL for remote 'origin' in '$(yellow "${target_folder}")'. Does the remote exist?"
     return 1
   fi
 

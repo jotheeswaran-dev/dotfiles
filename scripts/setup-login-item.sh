@@ -7,13 +7,12 @@
 # Exit immediately if a command exits with a non-zero status.
 set -euo pipefail
 
-# Re-source guard is inside .shellrc itself — safe to call unconditionally.
 source "${HOME}/.shellrc"
+_SCRIPT_NAME="${0:t}"
 
 usage() {
-  echo "$(red 'Usage'): $(yellow "${${(%):-%x}##*/}") -a <app-name>"
-  echo "  $(yellow '-a <app-name>') --> (mandatory) The name of the application to setup as a login item"
-  exit 1
+  print_usage "${1}" \
+    "$(yellow '-a <app-name>') --> (mandatory) The name of the application to setup as a login item"
 }
 
 main() {
@@ -24,24 +23,28 @@ main() {
         app_name="${OPTARG}"
         ;;
       \?)
-        usage
+        warn "-${OPTARG} is not a valid option"
+        usage "${_SCRIPT_NAME}"
         ;;
       :)
-        echo "Invalid option: -${OPTARG} requires an argument" 1>&2
-        usage
+        warn "-${OPTARG} requires an argument"
+        usage "${_SCRIPT_NAME}"
         ;;
     esac
   done
   shift $((OPTIND - 1))
 
   if is_zero_string "${app_name}"; then
-    usage
+    warn "Missing required arguments/switches"
+    usage "${_SCRIPT_NAME}"
   fi
 
   local app_path="/Applications/${app_name}.app"
   if is_directory "${app_path}"; then
     local found
-    found=$(osascript -e 'tell application "System Events" to get the name of every login item' | \grep -i "${app_name}" || true)
+    local all_login_items
+    all_login_items=$(osascript -e 'tell application "System Events" to get the name of every login item')
+    found="${${(M)${(f)all_login_items}:#(#i)*${app_name}*}[1]}"
     if is_zero_string "${found}"; then
       osascript -e "tell application \"System Events\" to make login item at end with properties {path:\"${app_path}\", hidden:false}" &>/dev/null  && success "Successfully setup '$(yellow "${app_name}")' as a login item" || warn "Failed to setup '$(yellow "${app_name}")' as a login item"
     fi

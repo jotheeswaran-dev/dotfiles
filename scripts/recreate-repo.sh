@@ -12,19 +12,14 @@ set -euo pipefail
 # Re-source guard is inside .aliases itself — safe to call unconditionally.
 # Sourcing .aliases also brings in .shellrc (which .aliases sources internally).
 source "${HOME}/.aliases"
+_SCRIPT_NAME="${0:t}"
 
 usage() {
-  echo "$(red 'Usage'): $(yellow "${${(%):-%x}##*/}") [-f] -d <repo-folder>"
-  echo " $(yellow '-f')               --> (optional) force squashing into a single commit (profiles repo will automatically/always be forced anyways)"
-  echo " $(yellow '-d <repo-folder>') --> (mandatory) The folder which has to be processed"
-  echo "    eg: $(cyan "-f -d \${HOME}")                (will push to $(yellow "$(build_keybase_repo_url "${KEYBASE_HOME_REPO_NAME}")"))"
-  echo "    eg: $(cyan "-d \${PERSONAL_PROFILES_DIR}")  (will push to $(yellow "$(build_keybase_repo_url "${KEYBASE_PROFILES_REPO_NAME}")"))"
-  exit 1
-}
-
-# Extract the specified git config value from the git repo in the specified folder
-extract_git_config_value() {
-  git -C "${1}" config --get "${2}" || error "Failed to get git config value '${2}' for folder '${1}'"
+  print_usage "${1}" \
+    "$(yellow '-f')               --> (optional) force squashing into a single commit (profiles repo will automatically/always be forced anyways)" \
+    "$(yellow '-d <repo-folder>') --> (mandatory) The folder which has to be processed" \
+    "   eg: $(cyan "-f -d \${HOME}")                (will push to $(yellow "$(build_keybase_repo_url "${KEYBASE_HOME_REPO_NAME}")"))" \
+    "   eg: $(cyan "-d \${PERSONAL_PROFILES_DIR}")  (will push to $(yellow "$(build_keybase_repo_url "${KEYBASE_PROFILES_REPO_NAME}")"))"
 }
 
 # Trap handler: on any exit, restore cron from backup if CRON_BACKUP_FILE is present.
@@ -48,18 +43,20 @@ main() {
         folder="${OPTARG}"
         ;;
       \?)
-        usage
+        warn "-${OPTARG} is not a valid option"
+        usage "${_SCRIPT_NAME}"
         ;;
       :)
-        echo "Invalid option: -${OPTARG} requires an argument" 1>&2
-        usage
+        warn "-${OPTARG} requires an argument"
+        usage "${_SCRIPT_NAME}"
         ;;
     esac
   done
   shift $((OPTIND - 1))
 
   if is_zero_string "${folder}"; then
-    usage
+    warn "Missing required arguments/switches"
+    usage "${_SCRIPT_NAME}"
   fi
 
   # Remove trailing slash if present
@@ -82,15 +79,20 @@ main() {
   local git_user_name
   local git_user_email
   local git_branch_name
-  git_url="$(extract_git_config_value "${folder}" remote.origin.url)"
-  git_user_name="$(extract_git_config_value "${folder}" user.name)"
-  git_user_email="$(extract_git_config_value "${folder}" user.email)"
+  git_url="$(get_git_config_value remote.origin.url "${folder}")"
+  git_user_name="$(get_git_config_value user.name "${folder}")"
+  git_user_email="$(get_git_config_value user.email "${folder}")"
   git_branch_name="$(git -C "${folder}" branch --show-current)"
-  is_zero_string "${git_branch_name}" && error 'Failed to determine current branch name'
 
   info "$(yellow 'Repo url'): '$(cyan "${git_url}")'"
   info "$(yellow 'User name'): '$(cyan "${git_user_name}")'"
   info "$(yellow 'User email'): '$(cyan "${git_user_email}")'"
+  info "$(yellow 'Branch'): '$(cyan "${git_branch_name}")'"
+
+  if is_zero_string "${git_url}" || is_zero_string "${git_user_name}" || is_zero_string "${git_user_email}" || is_zero_string "${git_branch_name}"; then
+    error "One or more required git metadata values are missing for '$(yellow "${folder}")' — see above"
+    exit 1
+  fi
 
   # Before deleting the current git information, ensure that keybase is installed and logged
   # in (if the remote url is a keybase url). This avoids a scenario where we delete the git
@@ -106,8 +108,8 @@ main() {
     git -C "${folder}" init --ref-format=reftable .
 
     git -C "${folder}" remote add origin "${git_url}"
-    git -C "${folder}" config user.name "${git_user_name}"
-    git -C "${folder}" config user.email "${git_user_email}"
+    is_non_zero_string "${git_user_name}"  && git -C "${folder}" config user.name "${git_user_name}"
+    is_non_zero_string "${git_user_email}" && git -C "${folder}" config user.email "${git_user_email}"
 
     rm -f "${folder}/.git/index.lock"
     git -C "${folder}" add -A .

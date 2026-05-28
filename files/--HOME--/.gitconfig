@@ -34,26 +34,22 @@
   # Example: git relative-path                               =>  src  (if cwd is repo/src)
   relative-path = "!bash -c 'echo ${0/$(git root)/} | tail -c+2'"
 
-  # Smart commit: if already ahead of remote, amends the existing unpushed commit;
-  # otherwise creates a new commit. Aborts if branches have diverged or nothing is staged.
+  # Smart commit: if already ahead of remote (and not diverged), amends the existing
+  # unpushed commit; if diverged or not yet ahead, creates a new commit instead.
+  # Aborts if nothing is staged.
   # Usage: git sci "<message>"
   # Example: git sci "fix: correct typo in README"
   sci = "!sh -c '\
     st=$(git status); \
-    if echo \"$st\" | grep -q \"have diverged\"; then \
-      printf \"Diverged branches: aborting\n\"; \
-      exit 1; \
-    elif ! echo \"$st\" | grep -q \"to unstage\"; then \
+    if ! echo \"$st\" | grep -q \"to unstage\"; then \
       printf \"Nothing to commit: aborting\n\"; \
+    elif echo \"$st\" | grep -q \"is ahead of\" && ! echo \"$st\" | grep -q \"have diverged\"; then \
+      printf \"Amending existing commit\n\"; \
+      git amq; \
     else \
-      if echo \"$st\" | grep -q \"is ahead of\"; then \
-        printf \"Amending existing commit\n\"; \
-        git amq; \
-      else \
-        printf \"Creating new commit\n\"; \
-        printf \"%s\n\" $0; \
-        git ci \"$0\"; \
-      fi \
+      printf \"Creating new commit\n\"; \
+      printf \"%s\n\" $0; \
+      git ci \"$0\"; \
     fi'"
 
   # Shows a compact one-line summary of a commit: hash, subject, and date.

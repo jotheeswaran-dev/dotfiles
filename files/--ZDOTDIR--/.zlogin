@@ -20,11 +20,16 @@
 source "${HOME}/.shellrc"
 
 recompile_zsh_scripts() {
-  if is_non_empty_file "${1}" && (! is_file "${1}.zwc" || [[ "${1}" -nt "${1}.zwc" ]]); then
+  # Resolve symlinks for the mtime check: zsh's -nt operator compares symlink mtime
+  # (not target mtime), so edits to the dotfiles target never trigger recompilation
+  # without resolving to the real path first.
+  # The .zwc file lives next to the symlink (${1}.zwc), not next to the real file.
+  local real="${1:A}"
+  if is_non_empty_file "${real}" && (! is_file "${1}.zwc" || [[ "${real}" -nt "${1}.zwc" ]]); then
     # Bare echo — not routed through a color function, so tilde sub must be explicit.
-    # Inline ${1//${HOME}/~} rather than replace_home_with_tilde: this function is
-    # defined in .zlogin before the guard-source on line 20 runs; keeping the inline
-    # form avoids any dependency on .shellrc load order within this file.
+    # Inline ${1//${HOME}/~} rather than replace_home_with_tilde: .shellrc is already
+    # sourced above (line 20), so replace_home_with_tilde is available here. The inline
+    # form is kept as a belt-and-suspenders measure against any future reordering.
     [[ -n "${DEBUG+1}" ]] && echo "recompiling '${1//${HOME}/~}'"
     # Remove any stale .zwc.old left by a previously failed zrecompile run before
     # attempting recompilation. zrecompile writes .zwc files read-only; if zcompile
@@ -82,8 +87,8 @@ find_in_folder_and_recompile() {
     \( \( -name 'node_modules' -o -name '.pnpm' \) -type d -prune \) -o \
     \( \( -name '*.sh' -o -name '*.zsh' \) -type f -print0 \) |
     while IFS= read -r -d $'\0' f; do
-    recompile_zsh_scripts "${f}"
-  done
+      recompile_zsh_scripts "${f}"
+    done
 
   touch "${sentinel}"
 }
@@ -96,10 +101,15 @@ autoload -Uz zrecompile
 recompile_zsh_scripts "${ZDOTDIR}/.zshenv"
 recompile_zsh_scripts "${ZDOTDIR}/.zshrc"
 recompile_zsh_scripts "${ZDOTDIR}/.zlogin"
+# The antidote static bundle lives in ZDOTDIR (not ANTIDOTE_HOME or XDG_CACHE_HOME),
+# so it is not picked up by any of the find_in_folder_and_recompile scans below.
+# Compile it explicitly so every shell startup sources bytecode, not raw zsh text.
+recompile_zsh_scripts "${ANTIDOTE_PLUGIN_ZSH}"
 
 find_in_folder_and_recompile "${ANTIDOTE_HOME}"
 
-# antidote doesn't know about these files, and so we don't depend on 'ZDOTDIR'
+# These files live in HOME (not ZDOTDIR), so they are not covered by the
+# find_in_folder_and_recompile scans above and must be compiled explicitly.
 recompile_zsh_scripts "${HOME}/.aliases"
 recompile_zsh_scripts "${HOME}/.shellrc"
 
@@ -131,6 +141,6 @@ find_in_folder_and_recompile "${XDG_CACHE_HOME}"
   # explicitly use both intel and arm install locations of homebrew
   find_in_folder_and_recompile /opt/homebrew
   find_in_folder_and_recompile /usr/local
-} &!
+} &|
 
 [[ -n "${DEBUG+1}" ]] && echo "Finished recompiling zsh scripts."

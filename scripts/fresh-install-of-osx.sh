@@ -19,7 +19,7 @@ set -euo pipefail
 _cleanup_and_exit() {
   local message='Installation failed. Check for error messages above.'
   # (( $+functions[...] )) is a no-subshell zsh builtin check, faster than 'type ... &>/dev/null'
-  if (( $+functions[error] )); then
+  if (($+functions[error])); then
     error "${message}"
   else
     echo "ERROR: ${message}" >&2
@@ -27,7 +27,7 @@ _cleanup_and_exit() {
 
   # Restore cron from the backup taken at the start of main(); CRON_BACKUP_FILE is set there.
   # (( $+functions[...] )) is a no-subshell zsh builtin check, faster than 'type ... &>/dev/null'
-  if (( $+functions[resume_cron] )); then
+  if (($+functions[resume_cron])); then
     resume_cron
   elif [[ -s "${CRON_BACKUP_FILE:-}" ]]; then
     # Fallback: shellrc not yet loaded, restore directly
@@ -43,7 +43,7 @@ _cleanup_and_exit() {
 }
 
 # Set DNS to 8.8.8.8 if on Jio ISP (GitHub may otherwise not resolve)
-setup_jio_dns() {
+_setup_jio_dns() {
   local _org
   # Capture curl output into a variable first; then test with a glob match.
   # Previously: curl ... | grep -qi 'jio' — two processes + pipe.
@@ -56,14 +56,14 @@ setup_jio_dns() {
 }
 
 # Download and source .shellrc from GitHub (before dotfiles are cloned)
-download_and_source_shellrc() {
+_download_and_source_shellrc() {
   echo "==> Download the '~/.shellrc' for loading the utility functions"
   if [[ -n "${FIRST_INSTALL:-}" ]]; then
     # Vanilla OS: always force a fresh download and re-source.
     # Unfunction the guard so .shellrc's own re-source check is bypassed.
     # This also handles retries on a vanilla OS where the script is re-run after an error.
-    (( $+functions[is_shellrc_sourced] )) && unfunction is_shellrc_sourced
-    curl --retry 3 --retry-delay 5 -fsSL "https://raw.githubusercontent.com/${GH_USERNAME}/dotfiles/refs/heads/${DOTFILES_BRANCH}/files/--HOME--/.shellrc" -o "${HOME}/.shellrc"
+    (($+functions[is_shellrc_sourced]))   && unfunction is_shellrc_sourced
+    curl "${_curl_opts[@]}" -fsSL "https://raw.githubusercontent.com/${GH_USERNAME}/dotfiles/refs/heads/${DOTFILES_BRANCH}/files/--HOME--/.shellrc" -o "${HOME}/.shellrc"
     echo "==> Successfully downloaded '${HOME}/.shellrc'"
   else
     # Pre-configured OS: skip downloading; the built-in guard makes the source below a no-op if already loaded.
@@ -74,7 +74,7 @@ download_and_source_shellrc() {
 }
 
 # Enable Touch ID for sudo command when running on the terminal
-approve_fingerprint_sudo() {
+_approve_fingerprint_sudo() {
   step_start
   section_header "$(yellow 'Setting up touchId for sudo access in terminal shells')"
 
@@ -112,7 +112,7 @@ approve_fingerprint_sudo() {
 }
 
 # Verify FileVault disk encryption is active
-ensure_filevault_is_on() {
+_ensure_filevault_is_on() {
   step_start
   section_header "$(yellow 'Verifying FileVault status')"
   if [[ "$(fdesetup isactive)" != 'true' ]]; then
@@ -123,7 +123,7 @@ ensure_filevault_is_on() {
 }
 
 # Install Xcode Command Line Tools via non-interactive, non-gui softwareupdate
-install_xcode_command_line_tools() {
+_install_xcode_command_line_tools() {
   step_start
   section_header "$(yellow 'Installing xcode command-line tools')"
   if ! xcode-select -p &>/dev/null; then
@@ -145,7 +145,7 @@ install_xcode_command_line_tools() {
 }
 
 # Create all directories referenced by env vars as a pre-emptive safety step
-ensure_directories_exist() {
+_ensure_directories_exist() {
   step_start
   section_header "$(yellow 'Creating directories defined by various env vars')"
   local -a folders=("${ANTIDOTE_HOME}" "${DOTFILES_DIR}" "${PROJECTS_BASE_DIR}" "${PERSONAL_BIN_DIR}" "${PERSONAL_CONFIGS_DIR}" "${PERSONAL_PROFILES_DIR}" "${XDG_CACHE_HOME}" "${XDG_CONFIG_HOME}" "${XDG_DATA_HOME}" "${XDG_STATE_HOME}")
@@ -156,7 +156,7 @@ ensure_directories_exist() {
 }
 
 # Clone the dotfiles repo and configure upstream
-clone_dot_files_repo() {
+_clone_dot_files_repo() {
   step_start
   section_header "$(yellow 'Installing dotfiles') into '$(purple "${DOTFILES_DIR}")'"
   if is_non_zero_string "${DOTFILES_DIR}" && ! is_git_repo "${DOTFILES_DIR}"; then
@@ -183,7 +183,7 @@ clone_dot_files_repo() {
 }
 
 # Install homebrew, tap repos, and run brew bundle
-install_homebrew() {
+_install_homebrew() {
   step_start
   section_header "$(yellow 'Installing homebrew') into '$(yellow "${HOMEBREW_PREFIX}")'"
   if is_zero_string "${HOMEBREW_PREFIX}"; then
@@ -199,7 +199,7 @@ install_homebrew() {
 
     local install_script_file
     install_script_file="$(mktemp)"
-    if curl --retry 3 --retry-delay 5 -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh -o "${install_script_file}"; then
+    if curl "${_curl_opts[@]}" -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh -o "${install_script_file}"; then
       NONINTERACTIVE=1 bash "${install_script_file}" || {
         rm -f "${install_script_file}"
         error 'Homebrew installation failed'
@@ -239,17 +239,15 @@ install_homebrew() {
     local brewfile_content
     brewfile_content="$(sed "/^[^#].*FIRST_INSTALL/q" "${HOMEBREW_BUNDLE_FILE}")"
     brewfile_content="${brewfile_content%$'\n'*FIRST_INSTALL*}"  # strip the FIRST_INSTALL guard line itself
-    if brew bundle check || brew bundle --file=- <<< "${brewfile_content}"; then
-      success 'Successfully installed cmd-line and gui apps using homebrew'
-    else
-      warn 'Homebrew bundle install encountered errors; continuing...'
-    fi
+    brew bundle check || brew bundle --file=- <<<"${brewfile_content}"
   else
-    if brew bundle check || brew bundle; then
-      success 'Successfully installed cmd-line and gui apps using homebrew'
-    else
-      warn 'Homebrew bundle install encountered errors; continuing...'
-    fi
+    brew bundle check || brew bundle
+  fi
+
+  if [[ $? -eq 0 ]]; then
+    success 'Successfully installed cmd-line and gui apps using homebrew'
+  else
+    warn 'Homebrew bundle install encountered errors; continuing...'
   fi
 
   # Note: load all zsh config files for the 2nd time for PATH and other env vars to take effect (due to defensive programming)
@@ -268,7 +266,7 @@ install_homebrew() {
 }
 
 # Clone the Keybase home repo (private configs)
-clone_home_repo() {
+_clone_home_repo() {
   step_start
   section_header "$(yellow 'Cloning') $(purple 'home') repo"
   if is_non_zero_string "${KEYBASE_HOME_REPO_NAME}"; then
@@ -288,7 +286,7 @@ clone_home_repo() {
 }
 
 # Clone the Keybase profiles repo (browser profiles)
-clone_profiles_repo() {
+_clone_profiles_repo() {
   step_start
   section_header "$(yellow 'Cloning') $(purple 'profiles') repo"
   if is_non_zero_string "${KEYBASE_PROFILES_REPO_NAME}" && is_non_zero_string "${PERSONAL_PROFILES_DIR}"; then
@@ -302,11 +300,11 @@ clone_profiles_repo() {
 }
 
 main() {
-  # Suspend cron early (shellrc not yet available at this point).
-  # CRON_BACKUP_FILE, suspend_cron and resume_cron live in .shellrc (section 1g) so they are
-  # guaranteed present the moment .shellrc is sourced, even before the dotfiles repo is cloned.
+  # Suspend cron early before .shellrc is available — suspend_cron cannot be called
+  # yet, so the backup and removal are done inline here. Once .shellrc is sourced,
+  # the EXIT and ERR traps use resume_cron/recron from .shellrc for restore.
   export CRON_BACKUP_FILE="${TMPDIR:-/tmp}/crontab_backup"
-  crontab -l > "${CRON_BACKUP_FILE}" 2>/dev/null || : > "${CRON_BACKUP_FILE}"
+  crontab -l >"${CRON_BACKUP_FILE}"  2>/dev/null || : >"${CRON_BACKUP_FILE}"
   crontab -r &>/dev/null || true
 
   trap _cleanup_and_exit ERR
@@ -318,6 +316,20 @@ main() {
   # so core.sshCommand is absent. Export GIT_SSH_COMMAND for the entire run to ensure the
   # connect timeout is honoured uniformly for all git operations.
   [[ -n "${FIRST_INSTALL:-}" ]] && export GIT_SSH_COMMAND="ssh -o ConnectTimeout=20"
+
+  # ~/.curlrc is not yet symlinked (install-dotfiles.rb runs later), so its defaults are
+  # absent. Define resilient curl flags explicitly for all bootstrap curl calls in this
+  # script. Once ~/.curlrc is in place these flags are redundant but harmless.
+  # Note: defined as an array so it expands correctly without word-splitting issues.
+  # Note: local -a initialises to an empty array (not unset), so "${_curl_opts[@]}"
+  #       expands to nothing safely under set -u when ~/.curlrc is already present.
+  # Note: --retry-all-errors is intentionally omitted — it causes the terminal app to close.
+  # Note: using raw -f test (not is_file) — .shellrc is not yet sourced at this point
+  #       so the utility function is not available.
+  local -a _curl_opts
+  if [[ ! -f "${HOME}/.curlrc" ]]; then
+    _curl_opts=(--retry 5 --retry-delay 10 --retry-max-time 120 --max-time 150 --connect-timeout 30 --retry-connrefused)
+  fi
 
   # Note: Cannot load from shellrc since that file won't be present in a new machine (vanilla OS)
   # $EPOCHSECONDS is provided by the zsh/datetime built-in module — always available, no fork.
@@ -347,35 +359,37 @@ main() {
   # section_header "$(yellow 'Disabling macos gatekeeper')"
   # sudo spectl --master-disable
 
-  setup_jio_dns
+  _setup_jio_dns
 
-  download_and_source_shellrc
+  _download_and_source_shellrc
 
   keep_sudo_alive
 
-  approve_fingerprint_sudo
+  _approve_fingerprint_sudo
 
-  ensure_filevault_is_on
+  _ensure_filevault_is_on
 
-  install_xcode_command_line_tools
+  _install_xcode_command_line_tools
 
   set_ssh_folder_permissions
 
-  ensure_directories_exist
+  _ensure_directories_exist
 
-  clone_dot_files_repo
+  _clone_dot_files_repo
 
   # run this outside of the clone function, since it needs to be run irrespective of whether the dotfiles repo was pre-existing or not
   append_to_path_if_dir_exists "${DOTFILES_DIR}/scripts"
   install-dotfiles.rb
 
+  # ~/.gitconfig is now symlinked by install-dotfiles.rb — core.sshCommand is in effect.
+  # Unset GIT_SSH_COMMAND so it no longer overrides core.sshCommand for the rest of the run.
+  unset GIT_SSH_COMMAND
+
   # Load all zsh config files for PATH and other env vars to take effect
+  (($+functions[is_shellrc_sourced]))   && unfunction is_shellrc_sourced
   DEBUG=true load_zsh_configs
 
-  install_homebrew
-
-  section_header2 "$(yellow 'Installing antidote plugins and generating antidote plugin bundle')"
-  update_antidote_and_regenerate_plugin_bundle
+  _install_homebrew
 
   if is_non_zero_string "${KEYBASE_USERNAME}"; then
     # Login into Keybase.
@@ -383,9 +397,9 @@ main() {
     ensure_keybase_logged_in || exit 1
     step_end
 
-    clone_home_repo
+    _clone_home_repo
 
-    clone_profiles_repo
+    _clone_profiles_repo
   else
     warn "Skipping cloning of any keybase repo since '$(yellow 'KEYBASE_USERNAME')' has not been set"
   fi
@@ -440,14 +454,14 @@ main() {
 
   if command_exists allow_all_direnv_configs; then
     # HACKTAG: Can take a long time on FIRST_INSTALL (same as install_mise_versions). Running in background to be non-blocking
-    allow_all_direnv_configs &!
+    allow_all_direnv_configs &|
   else
     warn "Skipping registering all direnv configs since '$(yellow 'allow_all_direnv_configs')' couldn't be found in the PATH; Please run it manually"
   fi
 
   if command_exists install_mise_versions; then
     # HACKTAG: For some reason this exits with an error code and can also take a long time on FIRST_INSTALL. Need to investigate a better fix
-    install_mise_versions &!
+    install_mise_versions &|
   else
     warn "Skipping installation of languages since '$(yellow 'install_mise_versions')' couldn't be found in the PATH; Please run it manually"
   fi

@@ -17,9 +17,12 @@ count() {
   if ! is_git_repo "${folder}"; then
     warn "Skipping finding count of the repo since '$(yellow "${folder}")' doesn't exist or is not a git repo"
   else
-    git -C "${folder}" count "${switches[@]}"
+    git -C "${folder}" count "${switches[@]}" || true
   fi
 }
 
-count "$@"
-compdef count
+# Run only when executed directly, not when sourced (e.g. to import the function into another script).
+[[ "${zsh_eval_context}" == *:file* ]] || count "$@"
+# ZSH_VERSION guard ensures the zsh-only '(( $+functions[...] ))' syntax is never
+# evaluated by non-zsh runtimes (e.g. direnv's sandbox).
+[[ -n "${ZSH_VERSION-}" ]] && (($+functions[compdef])) && compdef count

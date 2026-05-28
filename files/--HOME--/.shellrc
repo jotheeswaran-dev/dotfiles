@@ -3,10 +3,11 @@
 # vim:filetype=zsh syntax=zsh tabstop=2 shiftwidth=2 softtabstop=2 expandtab autoindent fileencoding=utf-8
 
 ################################################################################
-# This file is sourced all shells. It is used to define the bare minimum shell
+# This file is sourced by all shells. It is used to define the bare minimum shell
 # functions and env vars that are needed during bootstrap of a vanilla OS to
-# bootstrap installation of all other config files. Any functions that are
-# needed after the `.aliases` file is sourced need not be present here.
+# bootstrap installation of all other config files.
+# Functions that are only needed in interactive sessions and depend on DOTFILES_DIR
+# or other post-clone env vars should live in .aliases instead.
 #
 # file location: ${HOME}/.shellrc
 # load order: .zshenv [.shellrc], .zshrc [.shellrc, .aliases [.shellrc]], .zlogin
@@ -16,16 +17,23 @@
 # without needing their own check. This return is a no-op cost (single builtin).
 # ZSH_VERSION guard ensures the zsh-only '(( $+functions[...] ))' syntax is never
 # evaluated by non-zsh runtimes (e.g. direnv's sandbox).
-[[ -n "${ZSH_VERSION-}" ]] && (( $+functions[is_shellrc_sourced] )) && return
+[[ -n "${ZSH_VERSION-}" ]] && (($+functions[is_shellrc_sourced]))   && return
+
+# Dummy function to check if shellrc is sourced (mirrors is_aliases_sourced in .aliases)
+# Defined immediately after the guard so that any subsequent 'source ~/.shellrc' in zsh
+# returns before re-executing env vars, exports, and function definitions below.
+is_shellrc_sourced() {
+  return 0
+}
+
+# execute 'DEBUG=true zsh' to debug the load order of the custom zsh configuration files
+[[ -n "${DEBUG+1}" ]] && echo "loading ${0}"
 
 # BASH_VERSION is set by bash but unset in zsh. Any third-party script sourced
 # from here (e.g. antidote.zsh) that checks $BASH_VERSION bare will crash under
 # set -u with "parameter not set". Pre-set to empty once here so all downstream
 # sources are safe without needing per-callsite workarounds.
 BASH_VERSION="${BASH_VERSION:-}"
-
-# execute 'DEBUG=true zsh' to debug the load order of the custom zsh configuration files
-[[ -n "${DEBUG+1}" ]] && echo "loading ${0}"
 
 export ZDOTDIR="${ZDOTDIR:-"${HOME}"}"
 export XDG_BIN_HOME="${XDG_BIN_HOME:-"${HOME}/.local/bin"}"
@@ -102,11 +110,14 @@ export ARCHFLAGS="-arch ${ARCH}"
 
 # Moving homebrew env vars here itself so that the initial homebrew installation
 # on a vanilla OS can be done/applied into memory immediately
-if [[ "${ARCH}" =~ 'arm' ]]; then
-  export HOMEBREW_PREFIX='/opt/homebrew'
-else
-  export HOMEBREW_PREFIX='/usr/local'
-fi
+case "${ARCH}" in
+  *arm*)
+    export HOMEBREW_PREFIX='/opt/homebrew'
+    ;;
+  *)
+    export HOMEBREW_PREFIX='/usr/local'
+    ;;
+esac
 export HOMEBREW_NO_ANALYTICS=1
 export HOMEBREW_CLEANUP_MAX_AGE_DAYS=3
 export HOMEBREW_CLEANUP_PERIODIC_FULL_DAYS=3
@@ -123,11 +134,14 @@ export HOMEBREW_CURL_EXTRA_CURL_ARGS='--connect-timeout 300 --max-time 3600'
 # is sourced (e.g. in .zlogin). Mirrors antidote's own platform defaults (see get_dir()
 # in antidote.zsh): ~/Library/Caches/antidote on macOS, $XDG_CACHE_HOME/antidote on Linux.
 # Note: is_macos is not yet defined here; use $OSTYPE directly.
-if [[ "${OSTYPE}" =~ 'darwin' ]]; then
-  export ANTIDOTE_HOME="${HOME}/Library/Caches/antidote"
-else
-  export ANTIDOTE_HOME="${XDG_CACHE_HOME}/antidote"
-fi
+case "${OSTYPE}" in
+  *darwin*)
+    export ANTIDOTE_HOME="${HOME}/Library/Caches/antidote"
+    ;;
+  *)
+    export ANTIDOTE_HOME="${XDG_CACHE_HOME}/antidote"
+    ;;
+esac
 export ANTIDOTE_ZSH="${HOMEBREW_PREFIX}/opt/antidote/share/antidote/antidote.zsh"
 export ANTIDOTE_PLUGIN_ZSH="${ZDOTDIR}/.zsh_plugins.zsh"
 
@@ -142,11 +156,6 @@ export ANTIDOTE_PLUGIN_ZSH="${ZDOTDIR}/.zsh_plugins.zsh"
 # 1a. Shell state & basic predicates
 # --------------------------------------------------------------------------
 
-# Dummy function to check if shellrc is sourced
-is_shellrc_sourced() {
-  return 0
-}
-
 # Returns true if $1 is empty or unset.
 is_zero_string() {
   [[ -z "${1}" ]]
@@ -157,10 +166,34 @@ is_non_zero_string() {
   [[ -n "${1}" ]]
 }
 
+# Returns true if the array named $1 has no elements.
+is_empty_array() {
+  ((${#${(P)1}[@]} == 0))
+}
+
+# Returns true if the array named $1 has at least one element.
+is_non_empty_array() {
+  ((${#${(P)1}[@]} > 0))
+}
+
 # Returns true if stdin is a TTY, or if FORCE_COLOR is set (used to enable color
 # output in non-TTY subshells such as direnv or CI pipelines).
 is_running_in_tty() {
   [[ -t 0 ]] || is_non_zero_string "${FORCE_COLOR:-}"
+}
+
+# Joins array elements into a bulleted list string, each on a new line with a 2-space
+# indent and '- ' prefix: e.g. "  - item1\n  - item2".
+# Usage: join_array <array_name>
+# Example: join_array my_arr
+#
+# NOTE: The delimiter is hardcoded as a literal in the (pj:...:) flag because zsh does
+# not expand variables inside parameter expansion flags — e.g. (pj:${delimiter}:) treats
+# ${delimiter} as a literal string rather than expanding it.
+join_array() {
+  local -a arr=("${(@P)${1:?join_array: array name required}}")
+  is_empty_array arr && return
+  echo $'\n  - '"${(pj:\n  - :)arr}"
 }
 
 # Returns true if the current shell is zsh.
@@ -299,7 +332,7 @@ error() {
   # a raw string — ANSI codes would appear as literal escape characters there.
   local _msg="${1//${HOME}/~}"
   echo "❌ $(red '**ERROR**') ${_msg} 🤓"
-  osascript -e "display notification \"${_msg} 🤓\""
+  command_exists osascript && osascript -e "display notification \"${_msg} 🤓\""
   return 1
 }
 
@@ -310,7 +343,7 @@ error() {
 print_chars_for_length() {
   local char="${1:--}"  # default to using '-'
   # ${COLUMNS} is a zsh special variable updated on SIGWINCH — no tput fork needed.
-  local final_length=${2:-$(( COLUMNS / 4 ))}
+  local final_length=${2:-$((COLUMNS / 4))}
   printf "${char}%.0s" {1..${final_length}}
 }
 
@@ -329,7 +362,7 @@ _section_header_impl() {
   # ${COLUMNS} is a zsh special variable — no tput subprocess fork needed.
   local viewport_length=${COLUMNS}
   local header_length=${#header}
-  local final_length=$(( (viewport_length - header_length - indent_len) / 2 - 10 ))
+  local final_length=$(((viewport_length - header_length - indent_len) / 2 - 10))
 
   # Pre-compute the padding string once to avoid calling print_chars_for_length
   # twice via $(...) — each $(...) call forks a subshell.
@@ -370,7 +403,7 @@ print_script_duration() {
   # Simple duration formatting (you could make this fancier if needed)
   # printf -v writes directly into the variable — no $(...) subshell fork.
   local duration_human
-  printf -v duration_human '%02dh:%02dm:%02ds' $((duration/3600)) $((duration%3600/60)) $((duration%60))
+  printf -v duration_human '%02dh:%02dm:%02ds' $((duration / 3600)) $((duration % 3600 / 60)) $((duration % 60))
 
   echo "$(purple '==>') $(yellow 'Script finished at:') $(light_blue "${end_time_human}") ($(yellow 'Total duration:') $(light_blue "${duration_human}") $(yellow 'seconds'))."
 }
@@ -378,7 +411,8 @@ print_script_duration() {
 # --------------------------------------------------------------------------
 # 1c. Step timing helpers
 # Used by fresh-install-of-osx.sh and software-updates-cron.sh for per-step
-# progress reporting, and by print_script_start/duration in any script.
+# progress reporting. See print_script_start/duration (section 1b) for
+# overall script timing, which is independent of this stack-based mechanism.
 # --------------------------------------------------------------------------
 
 # Stack of epoch-second timestamps for the overall script-start epoch.
@@ -415,7 +449,7 @@ typeset -a STEP_START_TIMES=()
 # process can define a later epoch without clobbering the original.  Safe to
 # call multiple times.
 step_timing_init() {
-  if [[ ${#SCRIPT_START_TIMES[@]} -eq 0 ]]; then
+  if is_empty_array SCRIPT_START_TIMES; then
     SCRIPT_START_TIMES+=("${EPOCHSECONDS}")
   fi
 }
@@ -436,8 +470,8 @@ step_end() {
   # step_start after an error), fall back to the current epoch's start time
   # from the script timings stack so the duration stays meaningful.
   local step_start_time
-  if [[ ${#STEP_START_TIMES[@]} -eq 0 ]]; then
-    if [[ ${#SCRIPT_START_TIMES[@]} -gt 0 ]]; then
+  if is_empty_array STEP_START_TIMES; then
+    if is_non_empty_array SCRIPT_START_TIMES; then
       step_start_time="${SCRIPT_START_TIMES[-1]}"
       warn "step_end called without matching step_start; using current epoch start time as fallback"
     else
@@ -449,20 +483,26 @@ step_end() {
     STEP_START_TIMES=("${(@)STEP_START_TIMES[1,-2]}")
   fi
 
-  delta_step=$(( now - step_start_time ))
-  h=$(( delta_step / 3600 ))
-  m=$(( (delta_step % 3600) / 60 ))
-  s=$(( delta_step % 60 ))
+  delta_step=$((now - step_start_time))
+  h=$((delta_step / 3600))
+  m=$(((delta_step % 3600) / 60))
+  s=$((delta_step % 60))
   local step_human
   # printf -v writes directly into the variable — no $(...) subshell fork.
   printf -v step_human '%dh:%02dm:%02ds' "$h" "$m" "$s"
 
   # Use the most recently pushed script-start epoch for total elapsed.
-  local script_start_time="${SCRIPT_START_TIMES[-1]}"
-  delta_total=$(( now - script_start_time ))
-  h=$(( delta_total / 3600 ))
-  m=$(( (delta_total % 3600) / 60 ))
-  s=$(( delta_total % 60 ))
+  local script_start_time
+  if is_non_empty_array SCRIPT_START_TIMES; then
+    script_start_time="${SCRIPT_START_TIMES[-1]}"
+  else
+    script_start_time="${now}"
+    warn "step_end: SCRIPT_START_TIMES is empty; total elapsed will be 0"
+  fi
+  delta_total=$((now - script_start_time))
+  h=$((delta_total / 3600))
+  m=$(((delta_total % 3600) / 60))
+  s=$((delta_total % 60))
   local total_human
   printf -v total_human '%dh:%02dm:%02ds' "$h" "$m" "$s"
 
@@ -485,7 +525,7 @@ is_executable() {
 
 # Returns true if $1 is a non-empty path that is a symbolic link.
 is_symbolic_link() {
-  is_non_zero_string "${1}" && [[ -h "${1}" ]]
+  is_non_zero_string "${1}" && [[ -L "${1}" ]]
 }
 
 # Returns true if $1 is a non-empty path pointing to a regular file.
@@ -507,8 +547,8 @@ is_directory_empty() {
   # $(ls -A) kept intentionally — the pure-zsh glob alternative (*(ND[1])) cannot
   # be used here because .shellrc is sourced by direnv in bash, and bash has no
   # zsh glob qualifiers.  A ZSH_VERSION branch was considered but rejected: the
-  # function is only called a handful of times (set_ssh_folder_permissions, .envrc
-  # gnupg check), never on the startup hot path, so the ls fork cost is negligible.
+  # function is only called a handful of times (e.g. set_ssh_folder_permissions),
+  # never on the startup hot path, so the ls fork cost is negligible.
   is_directory "${1}" && [[ -z "$(ls -A "${1}")" ]]
 }
 
@@ -522,6 +562,21 @@ ensure_dir_exists() {
   fi
 }
 
+# Ruby load path for shared utilities — add both dotfiles and personal bin to RUBYLIB
+# so Ruby scripts can use 'require' instead of 'require_relative' for shared utilities.
+# Only add directories that exist.
+# Guarded by is_zsh: the array join syntax '${(j.:.)array}' is zsh-only and when direnv
+# sources this file in bash, this block must be skipped.
+if is_zsh; then
+  RUBYLIB_PATHS=()
+  is_directory "${DOTFILES_DIR}/scripts/utilities" && RUBYLIB_PATHS+=("${DOTFILES_DIR}/scripts/utilities")
+  is_directory "${PERSONAL_BIN_DIR}" && RUBYLIB_PATHS+=("${PERSONAL_BIN_DIR}")
+  if is_non_empty_array RUBYLIB_PATHS; then
+    export RUBYLIB="${(j.:.)RUBYLIB_PATHS}${RUBYLIB:+:${RUBYLIB}}"
+  fi
+  unset RUBYLIB_PATHS
+fi
+
 # Returns true if $1 is a non-empty path whose direct child .git directory exists.
 # Checks the repo root explicitly — does not work from nested sub-directories by design.
 is_git_repo() {
@@ -529,7 +584,15 @@ is_git_repo() {
   # git -C "${1}" rev-parse --is-inside-work-tree &>/dev/null  # alternative that works from any nested sub-directory
 }
 
-# Sources $1 if it is a regular file; warns if it does not exist or is not a file.
+# Returns the git config value for <key> in [folder] (defaults to $PWD).
+# Returns an empty string silently if the key is not set — callers decide whether that is an error.
+# Usage: get_git_config_value <key> [folder]
+get_git_config_value() {
+  local key="${1}" folder="${2:-${PWD}}"
+  git -C "${folder}" config --get "${key}" 2>/dev/null || true
+}
+
+# Sources $1 if it is a non-empty path pointing to a regular file; warns otherwise.
 load_file_if_exists() {
   is_file "${1}" && source "${1}" || warn "Couldn't load file: '$(yellow "${1}")'"
 }
@@ -540,7 +603,7 @@ load_file_if_exists() {
 
 # Returns true if $1 names a known command, function, alias, or shell builtin.
 command_exists() {
-  (( $+commands[${1}] || $+functions[${1}] || $+aliases[${1}] || $+builtins[${1}] ))
+  (($+commands[${1}] || $+functions[${1}] || $+aliases[${1}] || $+builtins[${1}]))
 }
 
 # Returns true if the current OS is macOS.
@@ -574,29 +637,29 @@ append_to_fpath_if_dir_exists() {
 }
 
 prepend_to_path_if_dir_exists() {
-  is_directory "${1}" && export PATH="${1}:${PATH+:${PATH}}"
+  is_directory "${1}" && export PATH="${1}${PATH:+:${PATH}}"
 }
 
 prepend_to_manpath_if_dir_exists() {
-  is_directory "${1}" && export MANPATH="${1}:${MANPATH+:${MANPATH}}"
+  is_directory "${1}" && export MANPATH="${1}${MANPATH:+:${MANPATH}}"
 }
 
 prepend_to_ldflags_if_dir_exists() {
-  is_directory "${1}" && export LDFLAGS="-L${1} ${LDFLAGS+ ${LDFLAGS}}"
+  is_directory "${1}" && export LDFLAGS="-L${1}${LDFLAGS:+ ${LDFLAGS}}"
 }
 
 prepend_to_cppflags_if_dir_exists() {
-  is_directory "${1}" && export CPPFLAGS="-I${1} ${CPPFLAGS+ ${CPPFLAGS}}"
+  is_directory "${1}" && export CPPFLAGS="-I${1}${CPPFLAGS:+ ${CPPFLAGS}}"
 }
 
 prepend_to_pkg_config_path_if_dir_exists() {
-  is_directory "${1}" && export PKG_CONFIG_PATH="${1}${PKG_CONFIG_PATH+:${PKG_CONFIG_PATH}}"
+  is_directory "${1}" && export PKG_CONFIG_PATH="${1}${PKG_CONFIG_PATH:+:${PKG_CONFIG_PATH}}"
 }
 
 # --------------------------------------------------------------------------
 # 1f. Bootstrap operations
 # Called by fresh-install-of-osx.sh and post-brew-install.sh.
-# set_ssh_folder_permissions is also called from .envrc files directly.
+# set_ssh_folder_permissions is also called from ~/.envrc directly.
 # --------------------------------------------------------------------------
 
 # Asks for the administrator password upfront and keeps it alive until the calling script
@@ -643,7 +706,7 @@ build_keybase_repo_url() {
 # Clones a git repo into a temp folder, moves the .git dir into the real target
 # location, and does an initial checkout there. Works around git's refusal to
 # clone into a non-empty directory (e.g. HOME). If the target is already a git
-# repo, runs pull-unshallow instead. Always updates submodules afterwards.
+# repo, runs fetch-unshallow instead. Always updates submodules afterwards.
 # Usage: clone_repo_into <repo-url> <target-folder> [branch]
 clone_repo_into() {
   local start_time=${EPOCHSECONDS}  # $EPOCHSECONDS from zsh/datetime — no $(date +%s) fork
@@ -664,7 +727,7 @@ clone_repo_into() {
     # the move bypasses git's normal post-clone finalisation; shell prompts read .git/HEAD directly)
     local real_ref
     real_ref="$(git -C "${target_folder}" symbolic-ref HEAD 2>/dev/null)"
-    is_non_zero_string "${real_ref}" && echo "ref: ${real_ref}" > "${target_folder}/.git/HEAD"
+    is_non_zero_string "${real_ref}" && echo "ref: ${real_ref}" >"${target_folder}/.git/HEAD"
     unset real_ref
 
     success "Successfully cloned '$(yellow "${1}")' into '$(yellow "${target_folder}")'"
@@ -679,12 +742,13 @@ clone_repo_into() {
     fi
     unset tmp_folder
     unset target_branch
-  elif is_git_repo "${target_folder}"; then
-    debug "Updating '$(yellow "${target_folder}")' since it's already a git repo"
-    git -C "${target_folder}" pull-unshallow
-    success "Successfully updated '$(yellow "${1}")' into '$(yellow "${target_folder}")'"
   else
-    warn "Skipping cloning of '$(yellow "${1}")' since the folder '$(yellow "${target_folder}")' could not be found"
+    # is_git_repo = (is_non_zero_string && is_directory .git) — logical complement of the if above,
+    # so this else is exhaustive and the condition check is redundant.
+    debug "Fetching '$(yellow "${target_folder}")' since it's already a git repo"
+    git -C "${target_folder}" fetch-unshallow
+    success "Successfully fetched '$(yellow "${1}")' into '$(yellow "${target_folder}")'"
+    warn 'Remember to merge the incoming changes into the working tree!'
   fi
 
   # Always update submodules after clone or pull — new commits may introduce submodule changes.
@@ -692,7 +756,7 @@ clone_repo_into() {
   unset target_folder
   local end_time=${EPOCHSECONDS}  # no $(date +%s) fork
   local duration=$((end_time - start_time))
-  debug "Clone process took ${duration} seconds"
+  debug "Process took ${duration} seconds"
 }
 
 # Sets secure permissions on SSH_CONFIGS_DIR (700 on the directory, 600 on all
@@ -717,35 +781,34 @@ set_ssh_folder_permissions() {
 }
 
 # Regenerates the antidote static plugin bundle after antidote is installed or
-# upgraded. Sources antidote.zsh to get the antidote function, runs
-# 'antidote update', unshallows each bundle clone, then rewrites
-# ANTIDOTE_PLUGIN_ZSH from the plugins.txt manifest.
-# Called by post-brew-install.sh after every 'brew bundle' run.
+# upgraded. Runs 'antidote update' in a clean zsh subshell, unshallows each
+# bundle clone, then rewrites ANTIDOTE_PLUGIN_ZSH from the plugins.txt manifest.
+# Called by post-brew-install.sh after every 'bupc' run.
 update_antidote_and_regenerate_plugin_bundle() {
   local plugins_txt="${ZDOTDIR}/.zsh_plugins.txt"
   if is_non_empty_file "${ANTIDOTE_ZSH}" && is_non_empty_file "${plugins_txt}"; then
-    load_file_if_exists "${ANTIDOTE_ZSH}"
-    # All antidote commands route through antidote-dispatch which references $1 bare —
-    # crashes under set -u when called with no args. Suspend nounset for all antidote
-    # calls in this block; it's third-party code we can't fix. Re-enable immediately after.
-    setopt LOCAL_OPTIONS
-    unsetopt NOUNSET
     if ! is_directory_empty "${ANTIDOTE_HOME}"; then
-      antidote update
+      # Run antidote update in a clean zsh subshell — no .zshrc, no extended_glob,
+      # no color variables. This prevents ANSI escape sequences from being
+      # misinterpreted as glob patterns inside antidote's internal eval calls.
+      zsh -f -c 'source "$1"; antidote update' -- "${ANTIDOTE_ZSH}"
       # antidote clones with --depth 1 (shallow). Convert each bundle to a full clone
       # immediately after update so subsequent runs take the normal fetch path and never
       # trigger --unshallow again (which fails on large repos like ohmyzsh).
       local bundle_dir
-      for bundle_dir in "${ANTIDOTE_HOME}"/github.com/*/*; do
-        [[ -d "${bundle_dir}/.git" ]] || continue
-        git -C "${bundle_dir}" fetch-unshallow 2>/dev/null || \
+      for bundle_dir in "${ANTIDOTE_HOME}"/github.com/*/*(N-/); do
+        is_git_repo "${bundle_dir}" || continue
+        # Disable fsck on fetch — some repos (e.g. ohmyzsh) have objects with
+        # zero-padded file modes that fail the remote fsck check during --unshallow.
+        git -C "${bundle_dir}" config --local fetch.fsckObjects false 2>/dev/null
+        git -C "${bundle_dir}" pull-unshallow -q 2>/dev/null ||
           warn "Could not unshallow '$(yellow "${bundle_dir}")' — will retry on next update"
       done
     fi
-    antidote bundle < "${plugins_txt}" > "${ANTIDOTE_PLUGIN_ZSH}" && \
-      success "antidote bundle regenerated at '$(yellow "${ANTIDOTE_PLUGIN_ZSH}")'" || \
+    # Run antidote bundle in a clean subshell for the same reason.
+    zsh -f -c 'source "$1"; antidote bundle <"$2"' -- "${ANTIDOTE_ZSH}" "${plugins_txt}" >"${ANTIDOTE_PLUGIN_ZSH}" &&
+      success "antidote bundle regenerated at '$(yellow "${ANTIDOTE_PLUGIN_ZSH}")'" ||
       warn 'Failed to regenerate antidote bundle'
-    setopt NOUNSET
   else
     warn "Skipping antidote bundle regeneration: antidote not found at '$(yellow "${ANTIDOTE_ZSH}")' or '$(yellow "${plugins_txt}")' is missing"
   fi
@@ -808,14 +871,14 @@ restore_cron() {
 suspend_cron() {
   debug 'Suspending cron jobs...'
   local src_file="${PERSONAL_CONFIGS_DIR}/crontab.txt"
-  if crontab -l > "${CRON_BACKUP_FILE}" 2>/dev/null; then
+  if crontab -l >"${CRON_BACKUP_FILE}"  2>/dev/null; then
     debug "Backed up existing crontab to '$(yellow "${CRON_BACKUP_FILE}")'"
   elif is_file "${src_file}"; then
     # No active crontab (e.g. FIRST_INSTALL), but a known-good crontab.txt exists - use it as the backup
     cp "${src_file}" "${CRON_BACKUP_FILE}"
     debug "Seeded cron backup from '$(yellow "${src_file}")'"
   else
-    : > "${CRON_BACKUP_FILE}"
+    : >"${CRON_BACKUP_FILE}"
     debug 'No existing crontab or crontab.txt; created empty backup'
   fi
   crontab -r &>/dev/null || true
@@ -896,6 +959,87 @@ if is_zsh; then
     else
       "${fallback_fn}" "$@"
     fi
+  }
+
+  # Creates a new shell script with standard header boilerplate.
+  # Usage: new_script <path> [shell_type]
+  #   shell_type: 'zsh' (default) or 'bash'
+  new_script() {
+    local script_path="${1:?Script path required}"
+    local shell_type="${2:-zsh}"
+
+    if is_file "${script_path}"; then
+      error "File already exists: ${script_path}"
+      return 1
+    fi
+
+    local dir="${script_path:h}"
+    if ! is_directory "${dir}"; then
+      error "Directory does not exist: ${dir}"
+      return 1
+    fi
+
+    cat >"${script_path}"  <<EOF
+#!/usr/bin/env ${shell_type}
+
+# vim:filetype=${shell_type} syntax=${shell_type} tabstop=2 shiftwidth=2 softtabstop=2 expandtab autoindent fileencoding=utf-8
+
+set -euo pipefail
+
+# TODO: Add your code here
+EOF
+
+    chmod +x "${script_path}"
+    success "Created new ${shell_type} script: ${script_path}"
+  }
+
+  # Ensures shell environment is properly loaded. Call this at the start of
+  # standalone scripts that need access to shell functions and environment
+  # variables but might be run outside of an interactive shell context.
+  #
+  # Usage: ensure_shell_env
+  #
+  # This function is idempotent and safe to call multiple times.
+  ensure_shell_env() {
+    # .shellrc has a guard against re-sourcing, so this is always safe
+    if ! is_file "${HOME}/.shellrc"; then
+      echo "Error: ${HOME}/.shellrc not found" >&2
+      return 1
+    fi
+    source "${HOME}/.shellrc"
+  }
+
+  # Validates that a required environment variable is set.
+  # Usage: require_env_var VAR_NAME [VAR_NAME2 ...]
+  #
+  # Example:
+  #   require_env_var PERSONAL_BIN_DIR DOTFILES_DIR
+  require_env_var() {
+    local var_name
+    for var_name in "$@"; do
+      if [[ -z "${(P)var_name:-}" ]]; then
+        echo "Error: ${var_name} must be set (source ~/.shellrc first)" >&2
+        return 1
+      fi
+    done
+  }
+
+  # Prints a standardized usage message and exits.
+  # Usage: print_usage <script-name> <option-descriptions...>
+  #
+  # Example:
+  #   print_usage "${0:t}" \
+  #     "-a <app-name>  --> (mandatory) The application name" \
+  #     "-v             --> (optional) Verbose output"
+  print_usage() {
+    local script_name="${1}"
+    shift
+    echo "$(red 'Usage'): $(cyan "${script_name}") $(yellow "${1:+"[options]"}")"
+    while [[ $# -gt 0 ]]; do
+      echo "  ${1}"
+      shift
+    done
+    exit 1
   }
 fi
 

@@ -10,7 +10,7 @@ require_relative 'string'
 # automatically suppressed when stdout is not a TTY.
 #
 # Usage:
-#   require_relative 'utilities/logging'
+#   require 'logging'
 #   include Logging
 #
 # Or call methods directly on the module:
@@ -88,9 +88,9 @@ module Logging
   # Prints a centred section header flanked by '=' padding, matching:
   #   echo "$(light_blue $(print_chars_for_length '=' …)) ⏳ ${header} $(light_blue …)"
   def section_header(header)
-    header_str     = header.replace_home_path_with_tilde
+    header_str = header.replace_home_path_with_tilde
     padding_length = [((terminal_width - header_str.length) / 2) - 10, 1].max
-    pad            = print_chars_for_length(char: '=', length: padding_length)
+    pad = print_chars_for_length(char: '=', length: padding_length)
     puts "#{pad.light_blue} ⏳ #{header_str} #{pad.light_blue}"
   end
 
@@ -105,7 +105,7 @@ module Logging
   # @param start_time [Integer] Unix epoch returned by an earlier +Time.now.to_i+.
   # @return [void]
   def print_script_duration(start_time)
-    now   = Time.now
+    now = Time.now
     human = format_duration(now.to_i - start_time)
     puts "#{'==>'.purple} #{'Script finished at:'.yellow} #{now.strftime('%Y-%m-%d %H:%M:%S').light_blue} " \
          "(#{'Total duration:'.yellow} #{human.light_blue} #{'seconds'.yellow})."
@@ -139,8 +139,7 @@ module Logging
   def step_end
     now = Time.now.to_i
 
-    step_start_time =
-      if nil_or_empty?(step_start_times)
+    step_start_time = if nil_or_empty?(step_start_times)
         if nil_or_empty?(script_start_times)
           warn('step_end called without any timing stack initialised; using current time as fallback')
           now
@@ -152,7 +151,7 @@ module Logging
         step_start_times.pop
       end
 
-    step_human  = format_duration(now - step_start_time)
+    step_human = format_duration(now - step_start_time)
     total_human = format_duration(now - (script_start_times.last || now))
 
     puts "#{'    ⏱'.purple} #{'step:'.yellow} #{step_human.light_blue} #{'| elapsed:'.yellow} #{total_human.light_blue}"
@@ -179,10 +178,9 @@ module Logging
   # $stdout.winsize[1] reads the terminal dimensions via ioctl — no `tput cols` subprocess fork.
   # rescue 0 handles non-tty contexts (e.g. pipes, cron) gracefully.
   def terminal_width
-    @terminal_width ||= begin
-      cols = $stdout.winsize[1] rescue 0
-      cols.nonzero? || 80
-    end
+    return @terminal_width if @terminal_width
+    cols = $stdout.winsize[1] rescue 0
+    @terminal_width = cols.nonzero? || 80
   end
 
   # Formats +seconds+ as "Hh:MMm:SSs".
