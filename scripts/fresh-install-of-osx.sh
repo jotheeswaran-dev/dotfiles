@@ -14,6 +14,9 @@
 
 # Exit immediately if a command exits with a non-zero status.
 set -euo pipefail
+# set -E ensures the ERR trap is inherited by all helper functions defined in this file,
+# so _cleanup_and_exit fires even when the failure originates inside a helper function.
+set -E
 
 # Error trap cleanup and exit
 _cleanup_and_exit() {
@@ -42,7 +45,7 @@ _cleanup_and_exit() {
   exit 1
 }
 
-# Set DNS to 8.8.8.8 if on Jio ISP (GitHub may otherwise not resolve)
+# Set DNS to 1.1.1.1 if on Jio ISP (GitHub may otherwise not resolve)
 _setup_jio_dns() {
   local _org
   # Capture curl output into a variable first; then test with a glob match.
@@ -51,7 +54,7 @@ _setup_jio_dns() {
   _org=$(curl -fsS https://ipinfo.io/org 2>/dev/null)
   if [[ "${_org:l}" == *jio* ]]; then
     echo '==> Setting DNS for WiFi from Jio ISP'
-    networksetup -setdnsservers Wi-Fi 8.8.8.8 || echo 'Warning: Failed to set DNS for Wi-Fi'
+    networksetup -setdnsservers Wi-Fi 1.1.1.1 || echo 'Warning: Failed to set DNS for Wi-Fi'
   fi
 }
 
@@ -235,16 +238,17 @@ _install_homebrew() {
   # Note: Split into taps, formulae and casks separately so that curl doesnt timeout, and failures are isolated and reported clearly.
   # Note: Each pass includes the Brewfile preamble (non tap/brew/cask lines) to preserve Ruby DSL context (e.g. cask_args, is_arm).
   # Note: For FIRST_INSTALL, only process lines up to the first 'FIRST_INSTALL' guard in the Brewfile (which marks the end of the base install section).
+  local _brew_bundle_exit=0
   if is_non_zero_string "${FIRST_INSTALL:-}"; then
     local brewfile_content
     brewfile_content="$(sed "/^[^#].*FIRST_INSTALL/q" "${HOMEBREW_BUNDLE_FILE}")"
     brewfile_content="${brewfile_content%$'\n'*FIRST_INSTALL*}"  # strip the FIRST_INSTALL guard line itself
-    brew bundle check || brew bundle --file=- <<<"${brewfile_content}"
+    brew bundle check || brew bundle --file=- <<<"${brewfile_content}" || _brew_bundle_exit=$?
   else
-    brew bundle check || brew bundle
+    brew bundle check || brew bundle || _brew_bundle_exit=$?
   fi
 
-  if [[ $? -eq 0 ]]; then
+  if [[ "${_brew_bundle_exit}" -eq 0 ]]; then
     success 'Successfully installed cmd-line and gui apps using homebrew'
   else
     warn 'Homebrew bundle install encountered errors; continuing...'
@@ -339,10 +343,12 @@ main() {
   # compute the "total elapsed" column independently of the local variable.
   # Both are required; see the design note above step_timing_init in .shellrc.
   local script_start_time
+  # zmodload here because .shellrc is not yet sourced at this point in main().
+  # Once .shellrc is sourced it will zmodload again — that is a no-op in zsh.
   zmodload zsh/datetime
   script_start_time="${EPOCHSECONDS}"
   SCRIPT_START_TIMES+=("${script_start_time}")
-  # strftime -s writes directly into a separate variable — preserves the epoch integer in script_start_time.
+  # current_timestamp is not yet available (shellrc not yet sourced); use strftime directly.
   local script_start_time_human
   strftime -s script_start_time_human '%Y-%m-%d %H:%M:%S' "${EPOCHSECONDS}"
   echo "==> Script started at: ${script_start_time_human}"
@@ -449,8 +455,12 @@ main() {
   step_end
 
   # Resurrect tracked repos.
-  # For now, to save time while re-imaging/setting up the laptop, we'll skip resurrecting all the tracked repos
-  # resurrect_tracked_repos
+  if command_exists resurrect_tracked_repos; then
+    # HACKTAG: Can take a long time on FIRST_INSTALL (same as install_mise_versions). Running in background to be non-blocking
+    resurrect_tracked_repos &|
+  else
+    warn "Skipping resurrecting tracked repos since '$(yellow 'resurrect_tracked_repos')' couldn't be found in the PATH; Please run it manually"
+  fi
 
   if command_exists allow_all_direnv_configs; then
     # HACKTAG: Can take a long time on FIRST_INSTALL (same as install_mise_versions). Running in background to be non-blocking

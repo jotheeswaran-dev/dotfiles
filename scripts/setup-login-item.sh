@@ -7,7 +7,7 @@
 # Exit immediately if a command exits with a non-zero status.
 set -euo pipefail
 
-source "${HOME}/.shellrc"
+source "${HOME}/.aliases"
 _SCRIPT_NAME="${0:t}"
 
 usage() {

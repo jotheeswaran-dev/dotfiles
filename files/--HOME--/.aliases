@@ -38,6 +38,97 @@ extract_last_segment() {
 }
 
 # --------------------------------------------------------------------------
+# Script utilities (zsh-only; not needed before dotfiles repo is cloned)
+# --------------------------------------------------------------------------
+
+# Parses positional args into 'folder' (first non-switch arg, defaulting to
+# pwd) and 'switches' (all --flag args). Callers must declare both locals
+# before calling this function so the assignments land in their scope.
+#
+# Usage:
+#   local folder
+#   local -a switches
+#   parse_folder_and_switches "$@"
+parse_folder_and_switches() {
+  folder=''
+  switches=()
+  for arg in "$@"; do
+    if [[ "${arg}" == --* ]]; then
+      switches+=("${arg}")
+    elif is_zero_string "${folder}"; then
+      folder="${arg}"
+    fi
+  done
+  folder="${folder:-$(pwd)}"
+}
+
+# Sources ${PERSONAL_BIN_DIR}/<cmd>-<cwd-basename>.sh if it exists and is
+# executable; otherwise falls back to calling <fallback_fn> with all args.
+#
+# Usage: dispatch_or_fallback <cmd> <fallback_fn> "$@"
+#
+# Example (in the 'push' autoload):
+#   push() { dispatch_or_fallback push _push "$@"; }
+dispatch_or_fallback() {
+  local cmd="${1}"
+  local fallback_fn="${2}"
+  shift 2
+  local override="${PERSONAL_BIN_DIR}/${cmd}-${PWD##*/}.sh"
+  if is_executable "${override}"; then
+    . "${override}" "$@"
+  else
+    "${fallback_fn}" "$@"
+  fi
+}
+
+# Creates a new shell script with standard header boilerplate.
+# Usage: new_script <path> [shell_type]
+#   shell_type: 'zsh' (default) or 'bash'
+new_script() {
+  local script_path="${1:?Script path required}"
+  local shell_type="${2:-zsh}"
+
+  if is_file "${script_path}"; then
+    error "File already exists: ${script_path}"
+    return 1
+  fi
+
+  local dir="${script_path:h}"
+  if ! is_directory "${dir}"; then
+    error "Directory does not exist: ${dir}"
+    return 1
+  fi
+
+  cat >"${script_path}" <<EOF
+#!/usr/bin/env ${shell_type}
+
+# vim:filetype=${shell_type} syntax=${shell_type} tabstop=2 shiftwidth=2 softtabstop=2 expandtab autoindent fileencoding=utf-8
+
+set -euo pipefail
+
+# TODO: Add your code here
+EOF
+
+  chmod +x "${script_path}"
+  success "Created new ${shell_type} script: ${script_path}"
+}
+
+# Validates that a required environment variable is set.
+# Usage: require_env_var VAR_NAME [VAR_NAME2 ...]
+#
+# Example:
+#   require_env_var PERSONAL_BIN_DIR DOTFILES_DIR
+require_env_var() {
+  local var_name
+  for var_name in "$@"; do
+    if [[ -z "${(P)var_name:-}" ]]; then
+      echo "Error: ${var_name} must be set (source ~/.aliases first)" >&2
+      return 1
+    fi
+  done
+}
+
+# --------------------------------------------------------------------------
 # GROUP 3: Ongoing Daily-Use Aliases & Functions
 # (Groups 1 and 2 are defined in .shellrc — bootstrap utilities and core predicates.)
 # Loaded after .shellrc via .zshrc. These are convenience wrappers, maintenance
@@ -375,14 +466,23 @@ if is_macos; then
 
   # Finds and appends the preferences associated with the partial string passed in as an argument.
   # Also, sorts (and removes duplicates) from the config file used to capture preferences.
+  # Warns (and does NOT append) if the discovered domain is on the denied list of
+  # machine-specific/account-bound domains defined in capture-prefs-denied-list.txt.
   # Usage: find_and_append_prefs <search-string>
   find_and_append_prefs() {
-    local file_name="${DOTFILES_DIR}/scripts/data/capture-prefs-domains.txt"
+    local allowed_list_file="${DOTFILES_DIR}/scripts/data/capture-prefs-allowed-list.txt"
+    local denied_list_file="${DOTFILES_DIR}/scripts/data/capture-prefs-denied-list.txt"
     defaults find "${1}" | \grep 'keys in domain' | while IFS="'" read -r _ field _; do
-      print -- "${field}" >>"${file_name}"
+      # Check whether this domain is on the denied list before appending.
+      # grep -Fxq: fixed-string, whole-line, quiet — no subprocess output.
+      if grep -Fxq "${field}" "${denied_list_file}" 2>/dev/null; then
+        warn "Skipping '$(yellow "${field}")' — it is on the denied list (machine-specific data; see capture-prefs-denied-list.txt)"
+      else
+        print -- "${field}" >>"${allowed_list_file}"
+      fi
     done
-    sort -u -o "${file_name}" "${file_name}"
-    unset file_name
+    sort -u -o "${allowed_list_file}" "${allowed_list_file}"
+    unset allowed_list_file denied_list_file
   }
 elif is_linux; then
   alias free_wifi='_free_wifi eth0'
@@ -396,6 +496,40 @@ if is_macos && command_exists brew; then
   alias bcg='brew outdated --greedy'
   alias bcug='brew upgrade --greedy'
   alias bupc='brew bundle check || brew bundle --cleanup || true; brew bundle cleanup -f || true; brew cleanup --prune=all || true; brew autoremove || true; brew upgrade || true; post-brew-install.sh || true'
+
+  # Regenerates the antidote static plugin bundle after antidote is installed or
+  # upgraded. Runs 'antidote update' in a clean zsh subshell, unshallows each
+  # bundle clone, then rewrites ANTIDOTE_PLUGIN_ZSH from the plugins.txt manifest.
+  # Called by post-brew-install.sh after every 'bupc' run and by software-updates-cron.sh.
+  update_antidote_and_regenerate_plugin_bundle() {
+    local plugins_txt="${ZDOTDIR}/.zsh_plugins.txt"
+    if is_non_empty_file "${ANTIDOTE_ZSH}" && is_non_empty_file "${plugins_txt}"; then
+      if ! is_directory_empty "${ANTIDOTE_HOME}"; then
+        # Run antidote update in a clean zsh subshell — no .zshrc, no extended_glob,
+        # no color variables. This prevents ANSI escape sequences from being
+        # misinterpreted as glob patterns inside antidote's internal eval calls.
+        zsh -f -c 'source "$1"; antidote update' -- "${ANTIDOTE_ZSH}"
+        # antidote clones with --depth 1 (shallow). Convert each bundle to a full clone
+        # immediately after update so subsequent runs take the normal fetch path and never
+        # trigger --unshallow again (which fails on large repos like ohmyzsh).
+        local bundle_dir
+        for bundle_dir in "${ANTIDOTE_HOME}"/github.com/*/*(N-/); do
+          is_git_repo "${bundle_dir}" || continue
+          # Disable fsck on fetch — some repos (e.g. ohmyzsh) have objects with
+          # zero-padded file modes that fail the remote fsck check during --unshallow.
+          git -C "${bundle_dir}" config --local fetch.fsckObjects false 2>/dev/null
+          git -C "${bundle_dir}" pull-unshallow -q 2>/dev/null ||
+            warn "Could not unshallow '$(yellow "${bundle_dir}")' — will retry on next update"
+        done
+      fi
+      # Run antidote bundle in a clean subshell for the same reason.
+      zsh -f -c 'source "$1"; antidote bundle <"$2"' -- "${ANTIDOTE_ZSH}" "${plugins_txt}" >"${ANTIDOTE_PLUGIN_ZSH}" &&
+        success "antidote bundle regenerated at '$(yellow "${ANTIDOTE_PLUGIN_ZSH}")'" ||
+        warn 'Failed to regenerate antidote bundle'
+    else
+      warn "Skipping antidote bundle regeneration: antidote not found at '$(yellow "${ANTIDOTE_ZSH}")' or '$(yellow "${plugins_txt}")' is missing"
+    fi
+  }
 
   # Audits and auto-styles a Homebrew cask formula for contribution readiness.
   # Usage: check_cask <cask-name>
@@ -549,12 +683,13 @@ fi
 # sourced, well before the dotfiles repo exists.  See section 1g in .shellrc.
 # --------------------------------------------------------------------------
 
-# Internal: writes a fresh crontab.txt to $1 with the standard env header and
-# the software-updates-cron.sh schedule. Called only by recron.
+# Internal: seeds crontab.txt at $1 with the standard env header and the
+# software-updates-cron.sh schedule. Called by recron only when crontab.txt
+# does not already exist (bootstrap / first-install path).
 # Usage: _create_crontab <output-file-path>
 _create_crontab() {
-  debug 'Creating crontab.txt'
   local file="${1}"
+  debug "Creating '$(yellow "${file}")'"
 
   echo '# Reference: https://crontab.guru/' >"${file}"
   echo >>"${file}"
@@ -566,14 +701,20 @@ _create_crontab() {
   echo "HOME=\"${HOME}\"" >>"${file}"
   echo "PATH=${HOMEBREW_PREFIX}/bin:/usr/bin:/bin  # Needed for chronic to be in the PATH" >>"${file}"
   echo >>"${file}"
-  echo "0   */2   *   *   *   chronic zsh -lsc \"${DOTFILES_DIR}/scripts/software-updates-cron.sh | tee -a ${HOME}/software-updates-cron.log\"" >>"${file}"
+  echo "0   *   *   *   *   chronic zsh -lsc \"${DOTFILES_DIR}/scripts/software-updates-cron.sh | tee -a ${HOME}/software-updates-cron.log\"" >>"${file}"
 }
 
-# Regenerates crontab from scratch using the canonical crontab.txt template.
+# Loads the system crontab from ${PERSONAL_CONFIGS_DIR}/crontab.txt.
+# If crontab.txt does not exist yet (bootstrap / first-install), seeds it first
+# via _create_crontab so there is always a known-good file on disk.
+# Edit crontab.txt directly to change the schedule; recron will pick it up.
 recron() {
   debug 'Setting up crontab'
   local cron_file="${PERSONAL_CONFIGS_DIR}/crontab.txt"
-  _create_crontab "${cron_file}"
+  if ! is_file "${cron_file}"; then
+    debug "'$(yellow "${cron_file}")' not found — seeding from template"
+    _create_crontab "${cron_file}"
+  fi
   restore_cron "${cron_file}"
   success 'Crontab set up successfully'
 }
@@ -599,6 +740,31 @@ with_cron_suspended() {
 # 3k. Keybase helpers
 # --------------------------------------------------------------------------
 
+# Ensures keybase is installed and the current user is logged in.
+# Returns 1 (non-zero) on failure so callers can decide whether to exit or continue.
+ensure_keybase_logged_in() {
+  if ! command_exists keybase; then
+    error "'keybase' command not found in the PATH. Aborting!!!"
+    return 1
+  fi
+  debug "$(yellow 'Logging into keybase')"
+  # Note: avoid `keybase status | grep -q` under set -o pipefail — grep -q exits after
+  # the first match, sending SIGPIPE to keybase (exit 141); pipefail surfaces that
+  # instead of grep's 0, inverting the condition. $() buffers all output first, avoiding SIGPIPE.
+  if [[ -n "$(keybase status --json 2>/dev/null | \grep '"logged_in":true')" ]]; then
+    warn "Skipping keybase login since '$(yellow "${KEYBASE_USERNAME}")' is already logged in"
+  elif ! keybase login; then
+    error 'Could not login into keybase. Retry after logging in.'
+    return 1
+  fi
+}
+
+# Builds the keybase:// URL for the given repo name owned by KEYBASE_USERNAME.
+# Usage: build_keybase_repo_url <repo-name>
+build_keybase_repo_url() {
+  echo "keybase://private/${KEYBASE_USERNAME}/${1}"
+}
+
 # Runs 'keybase git gc --force' on the named repo. Whether this actually
 # reclaims space on the remote is unverified — use as a best-effort compaction step.
 # Usage: kbgc <repo-name>
@@ -621,11 +787,18 @@ implode() {
   sudo rm -rfv "${HOME}"/.[a-z]*
 
   local folders=(
+    "${ANTIDOTE_HOME}"
+    "${ANTIDOTE_PLUGIN_ZSH}"
     "${DOTFILES_DIR}"
-    "${HOME}/personal"
     "${HOMEBREW_BUNDLE_FILE}"
     "${HOMEBREW_PREFIX}"
+    "${HOME}/personal"
     "${PROJECTS_BASE_DIR}"
+    "${XDG_BIN_HOME}"
+    "${XDG_CACHE_HOME}"
+    "${XDG_CONFIG_HOME}"
+    "${XDG_DATA_HOME}"
+    "${XDG_STATE_HOME}"
   )
   for f in "${folders[@]}"; do
     sudo rm -rfv "${f}"*

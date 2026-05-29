@@ -10,7 +10,10 @@ This script can be used to quickly add a new upstream remote to the specified gi
 
 This script is useful to capture the preferences of the known applications (both system-installed and custom-installed applications) using the `defaults read` command. It can be used to both export the preferences/settings (from the old system) or import them (into the new system). As of version 2.0.4, added a new shell function to help with the above called: `find_and_append_prefs`.
 
-The whitelist of preference domains to capture is maintained in [`scripts/data/capture-prefs-domains.txt`](scripts/data/capture-prefs-domains.txt).
+Two data files govern which domains are processed:
+
+- **[`scripts/data/capture-prefs-allowed-list.txt`](scripts/data/capture-prefs-allowed-list.txt)** — the list of preference domains to export/import. Add entries here (one domain per line) to include an app's preferences in the backup. Use `find_and_append_prefs <search-string>` to discover and append a domain automatically; it will warn and refuse to add the domain if it appears on the denied list.
+- **[`scripts/data/capture-prefs-denied-list.txt`](scripts/data/capture-prefs-denied-list.txt)** — domains that must never be exported or imported. These contain machine-specific identifiers (device UUIDs, hardware MAC addresses), account-bound credentials (Apple ID DSID, MDM enrollment tokens, AirTag beacon keys), or ephemeral CloudKit cache state that is meaningless or harmful when applied to a different machine. Any domain present in this file is skipped with a warning during both export and import, even if it also appears in the allowed list. `find_and_append_prefs` also checks this file before appending to the allowed list.
 
 ## cleanup-browser-profiles.sh
 
@@ -43,7 +46,7 @@ Basically, to get started with the dotfiles, you just need to run the `${DOTFILE
 
 * If you already have any of the dotfiles that are managed via this repo, *DON'T WORRY!* Your files will be moved to the cloned folder - so that you can then commit and push them to your fork!
 * This script will also handle nested config files - as long as they are already present in this repo.
-* Special handling (rename + copy instead of symlink) for `custom.git*` files (`.gitattributes`, `.gitignore`) — git itself does not handle symlinks reliably for its own core config files, so these are copied rather than symlinked. This means **you must always edit the `custom.git*` source files in this repo**, never the copies at the destination. They will not auto-update like symlinks do.
+* Special handling (copy instead of symlink) for `custom.git*` files (`.gitattributes`, `.gitignore`) — git itself does not handle symlinks reliably for its own core config files, so these are copied rather than symlinked. Resolution when both the source and the destination exist as real files: on `FIRST_INSTALL` the destination always wins (moved into repo, then copied back); otherwise the file with the **newer mtime** wins. Prefer editing the `custom.git*` source files in this repo; if you edit the destination directly, ensure its mtime is newer before re-running `install-dotfiles.rb`.
 * If you do not want a specific file from the home folder to be overridden, simply delete it from this repo's `files` folder - and it will not be processed.
 * If you wish to add a new file to be tracked and managed via this backup mechanism, add it into the appropriate `files/--VAR--/` subdirectory matching the destination env var. The `--VAR--` naming convention: each subdirectory name is an environment variable name wrapped in double-dashes (e.g. `--HOME--` resolves to `$HOME`, `--XDG_CONFIG_HOME--` resolves to `$XDG_CONFIG_HOME`). Files inside are symlinked into the resolved directory. Plain subdirectory names without the `--VAR--` pattern are also valid — they resolve literally from `/` (e.g. `files/etc/` → `/etc/`), but the `--VAR--` convention is preferred for portability across machines where paths may differ.
 

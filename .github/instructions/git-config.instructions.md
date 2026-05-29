@@ -4,6 +4,68 @@ applyTo: "**/.gitconfig,**/custom.gitattributes,**/add-upstream-git-config.sh"
 
 # Git Configuration Instructions
 
+## Shell Scripting Rules Inside Aliases
+
+These rules mirror the shell scripting rules in `shell-scripting.instructions.md`
+and apply to every `!sh -c` or `!f()` alias body.
+
+### Always Quote Variables
+
+Always quote variable expansions to prevent word-splitting on values that could
+contain spaces:
+
+```ini
+# BAD — unquoted, breaks on paths with spaces
+my-alias = !sh -c 'git -C $1 command' -
+
+# Good — quoted
+my-alias = !sh -c 'git -C "${1:-.}" command' -
+```
+
+### Brace Notation
+
+Always use `${var}` brace notation — never bare `$var` (except single-character
+special params `$?`, `$#`, `$@`, `$$`, etc.):
+
+```ini
+# BAD
+my-alias = "!f() { echo $branch; }; f"
+
+# Good
+my-alias = "!f() { echo \"${branch}\"; }; f"
+```
+
+### Guard Positional Parameters with Defaults
+
+Under `set -u` (or any strict mode), bare `$1` fails when no argument is given.
+Always provide a default with `${1:-}` (empty default) or a meaningful fallback:
+
+```ini
+# BAD — fails if no argument supplied
+my-alias = !sh -c 'git checkout $1' -
+
+# Good — empty default, safe when no arg
+my-alias = !sh -c 'git checkout "${1:-}"' -
+
+# Good — meaningful fallback (current dir)
+my-alias = !sh -c 'git -C "${1:-.}" status' -
+```
+
+### Single vs Double Quotes
+
+Use single quotes for static strings with no variable expansion inside the alias
+value. Use double quotes only when the string contains variable references:
+
+```ini
+# Good — static string, single quotes
+my-alias = !sh -c 'printf "no args\n"' -
+
+# Good — variable expansion, double quotes required
+my-alias = "!f() { printf '%s\n' \"${1:-}\"; }; f"
+```
+
+---
+
 ## `~/.gitconfig` Aliases
 
 Aliases that use shell commands must use `!sh -c '...' -` to properly handle
@@ -23,6 +85,35 @@ For aliases that accept additional arguments, pass them through with `"$@"`:
 pull-unshallow = !sh -c 'cd "${1:-.}" && shift && git fetch --unshallow "$@" && git pull "$@"' -
 ```
 
+### `--` Trailer and `$0` vs `$1`
+
+The trailing `-` after the shell string sets `$0` (the script name) to `-`.
+Positional arguments from the git invocation then start at `$1`. This is the
+correct convention for `!sh -c '...' -` aliases:
+
+```ini
+# $1 = first user-supplied arg (or "." if no arg given)
+my-alias = !sh -c 'git -C "${1:-.}" command' -
+```
+
+Do NOT use `$0` for user arguments — `$0` is always `-` (the script name
+passed as the trailing argument to `sh -c`).
+
+### `!f()` Named Function Pattern
+
+For multi-step logic, use a named function rather than a bare inline
+expression. This improves readability and avoids quoting complexity:
+
+```ini
+my-cmd = "!f() { git -C \"${1:-.}\" command \"$@\"; }; f"
+```
+
+Simpler single-command aliases can use `!git` or bare git subcommand directly:
+
+```ini
+st = status --short --branch
+```
+
 ## Shallow Clone Aliases
 
 - `git fetch-unshallow`: fetch and unshallow if repo is shallow. Guards against
@@ -33,46 +124,69 @@ pull-unshallow = !sh -c 'cd "${1:-.}" && shift && git fetch --unshallow "$@" && 
 fetch-unshallow = !sh -c 'git -C "${1:-.}" rev-parse --is-shallow-repository | grep -q true && git -C "${1:-.}" fetch --unshallow || git -C "${1:-.}" fetch' -
 ```
 
-## `git sci` (Stage + Commit Interactive)
+## `git sci` (Smart Commit — Non-Interactive)
 
-Must check for diverged state before attempting `--amend`:
+`git sci "<message>"` is fully non-interactive. It takes a commit message as
+its argument and decides whether to create a new commit or amend the last one:
+
+- Aborts if nothing is staged (`git diff --cached --quiet`).
+- Amends (`git amq`) if already ahead of remote and not diverged.
+- Creates a new commit (`git ci "<message>"`) otherwise.
+
+Use `git diff --cached --quiet` to check for staged changes — not
+`git status --porcelain | grep "to unstage"`. The latter is locale-dependent
+and breaks for non-English git installations.
 
 ```ini
-sci = !sh -c 'git status --porcelain | grep -q . && git add -p && \
-  git status --short && git log --oneline -1 && \
-  git diff --cached --stat && \
-  git diff @{u}..HEAD --name-only 2>/dev/null | grep -q . \
-    && git commit || git commit --amend' -
+sci = "!sh -c '\
+  if git diff --cached --quiet; then \
+    printf \"Nothing staged: aborting\n\"; \
+  elif git status | grep -q \"is ahead of\" && ! git status | grep -q \"have diverged\"; then \
+    printf \"Amending existing commit\n\"; \
+    git amq; \
+  else \
+    printf \"Creating new commit\n\"; \
+    git ci \"${1:-}\"; \
+  fi' -"
 ```
+
+Both paths are non-interactive: `git amq` = `commit --amend --no-edit --quiet`;
+`git ci "<msg>"` = `commit -m "<msg>"`.
 
 ## `git size`
 
-Use three subshell invocations for clarity (human-triggered, not in startup):
+`git size` is human-triggered (not in the startup hot path), so subshell
+invocations are acceptable. Quote all command substitutions to handle paths
+containing spaces:
 
 ```ini
-size = !sh -c 'echo "Working tree: $(du -sh . | cut -f1)"; echo "Git objects: $(git count-objects -vH | grep size-pack | cut -d: -f2)"; echo "Largest objects: $(git rev-list --all --objects | sort -k2 | uniq -f1 | sort -rn | head -5)"' -
+size = !printf '==> Size of repository at %s: %s\n' "$(git rev-parse --show-toplevel)" "$(du -sh "$(git rev-parse --show-toplevel)/.git" | cut -f1)"
 ```
 
-## Aliases and `!` Functions
+## `git cc` and `git rfc` — Reflog Expiry Without Stash Loss
 
-For complex logic, prefer the named function pattern for readability:
+`git reflog expire --all` covers `refs/stash` and will discard stashes.
+**Never use `--all`** in `reflog expire`. Instead, enumerate refs explicitly
+using `git for-each-ref`:
 
 ```ini
-[alias]
-  my-cmd = "!f() { git -C \"${1:-.}\" command; }; f"
+# BAD — discards stashes
+rfc = reflog expire --expire=now --all
+
+# Good — preserves refs/stash
+rfc = "!f() { refs=$(git for-each-ref --format='%(refname)' refs/heads refs/remotes refs/tags); [ -n \"${refs}\" ] && git reflog expire --expire=now --expire-unreachable=now --stale-fix ${refs}; }; f"
 ```
 
-Simpler single-command aliases can use `!git` directly:
-
-```ini
-  st = status --short --branch
-```
+The same rule applies inside `git cc` — the `reflog expire` step must use
+`git for-each-ref` enumeration, not `--all`.
 
 ## `.gitattributes`
 
 `install-dotfiles.rb` copies `custom.gitattributes` to `.gitattributes` in the
-appropriate directory. Always edit `custom.gitattributes`, not `.gitattributes`
-directly.
+appropriate directory. Resolution when both files exist as real files: on `FIRST_INSTALL`
+the destination wins; otherwise the newer mtime wins (repo source wins on a tie).
+Prefer editing `custom.gitattributes` in the repo; if you edit `.gitattributes` directly,
+ensure its mtime is newer before re-running `install-dotfiles.rb`.
 
 Binary file types must be marked binary:
 

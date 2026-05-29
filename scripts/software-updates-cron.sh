@@ -15,6 +15,10 @@ source "${HOME}/.aliases"
 # load_zsh_configs must be called explicitly to bring all zsh configs into scope.
 load_zsh_configs
 
+# error() (from .shellrc) calls notify() which triggers an osascript notification — use it directly
+# for the ERR trap so we don't need a separate helper.
+trap 'current_timestamp _trap_time; error "Software updates failed at ${_trap_time}. Check ~/software-updates-cron.log for details."' ERR
+
 # Run a single update step if the check command is available
 _perform_update() {
   local title="${1}"
@@ -45,7 +49,7 @@ main() {
   local script_start_time
   script_start_time="${EPOCHSECONDS}"
   SCRIPT_START_TIMES+=("${script_start_time}")
-  local model tracked_file f folder
+  local tracked_file f folder
   print_script_start
 
   # brew doctor # Removed for cron job efficiency
@@ -116,32 +120,22 @@ main() {
     step_end
   fi
 
-  if command_exists ollama; then
-    step_start
-    section_header "$(yellow 'Pull ollama models')"
-    local -a ollama_models=(
-      deepseek-coder-v2
-      gpt-oss:20b
-      qwen3-coder:30b
-    )
-    for model in "${ollama_models[@]}"; do
-      ollama pull "${model}"
-    done
-    step_end
-  fi
-
   success 'Finished independent updates.'
 
   step_start
   section_header "$(yellow 'Update repos in home folder')"
-  home pull
+  # Aliases ('home', 'rug') are not expanded in non-interactive shells (e.g. cron).
+  # Use the equivalent direct invocation instead of the 'home pull' alias.
+  FOLDER="${HOME}" FILTER='.bin|.dotfiles|zsh|mise' MAXDEPTH=5 run-all.sh git pull || warn 'Failed to pull home repos'
   step_end
 
   sleep 10  # so that GH doesn't throttle when we call a lot of times within a short time
 
   step_start
   section_header "$(yellow 'Upreb repos in oss folder')"
-  oss upreb && success 'Finished upreb for oss repos' || warn 'Failed to upreb oss repos'
+  # Aliases ('oss', 'rug') are not expanded in non-interactive shells (e.g. cron).
+  # Use the equivalent direct invocation instead of the 'oss upreb' alias.
+  FOLDER="${PROJECTS_BASE_DIR}/oss" MAXDEPTH=4 run-all.sh git upreb && success 'Finished upreb for oss repos' || warn 'Failed to upreb oss repos'
   step_end
 
   step_start
@@ -153,7 +147,7 @@ main() {
   section_header "$(yellow 'Prune old timestamped session backups from browser-profiles repo')"
   if is_git_repo "${PERSONAL_PROFILES_DIR}"; then
     local cutoff_date file_date
-    # Compute cutoff date string (7 days ago) using pure zsh arithmetic + strftime.
+    # Compute cutoff date string (7 days ago) using pure zsh arithmetic + current_date.
     # YYYY-MM-DD strings sort lexicographically, so string comparison is correct.
     strftime -s cutoff_date '%Y-%m-%d' $((EPOCHSECONDS - 7 * 24 * 3600))
     # Pattern: zen-sessions-backup/zen-sessions-YYYY-MM-DD-HH.jsonlz4
@@ -179,6 +173,24 @@ main() {
     unset cutoff_date old_backups
   else
     debug "Skipping session backup pruning — not a git repo: '$(yellow "${PERSONAL_PROFILES_DIR}")'"
+  fi
+  step_end
+
+  step_start
+  section_header "$(yellow 'Check profiles repo size')"
+  if is_git_repo "${PERSONAL_PROFILES_DIR}"; then
+    local profiles_size_kb
+    profiles_size_kb=$(du -sk "${PERSONAL_PROFILES_DIR}" 2>/dev/null | awk '{print $1}')
+    local profiles_size_limit_kb=$((2 * 1024 * 1024))  # 2 GB
+    if ((profiles_size_kb > profiles_size_limit_kb)); then
+      local profiles_size_human
+      profiles_size_human=$(du -sh "${PERSONAL_PROFILES_DIR}" 2>/dev/null | awk '{print $1}')
+      error "Profiles repo is ${profiles_size_human} — exceeds 2GB threshold. Consider running: recreate-repo.sh -d \"${PERSONAL_PROFILES_DIR}\""
+      unset profiles_size_human
+    else
+      debug "Profiles repo size within 2GB threshold"
+    fi
+    unset profiles_size_kb profiles_size_limit_kb
   fi
   step_end
 
@@ -221,19 +233,34 @@ main() {
 
   step_start
   section_header "$(yellow 'Checking if any greedy applications are outdated')"
-  if command_exists bcg; then
+  if command_exists brew; then
     local outdated
-    outdated="$(bcg | \grep -v -iE 'homebrew|Downloading')"
-    is_non_zero_string "${outdated}" && error "Found some outdated softwares that need manual updating: $(red "${outdated}")"
+    # 'bcg' alias (brew outdated --greedy) is not expanded in non-interactive shells (cron).
+    # '|| true' prevents grep -v from triggering the ERR trap when all lines are filtered out
+    # (grep -v exits 1 when no lines pass the filter).
+    outdated="$(brew outdated --greedy | \grep -v -iE 'homebrew|Downloading' || true)"
+    # warn (not error): outdated software needs manual attention but is not a script failure.
+    # error() returns 1 and would trigger the ERR trap, firing a spurious "Software updates failed"
+    # notification. Instead, warn to the terminal and notify explicitly with the plain-text list.
+    if is_non_zero_string "${outdated}"; then
+      warn "Found some outdated softwares that need manual updating: $(yellow "${outdated}")"
+      # Replace newlines with ', ' — osascript display notification cannot span multiple lines.
+      local outdated_flat="${outdated//$'\n'/, }"
+      notify "Found some outdated softwares that need manual updating: ${outdated_flat}" "⚠️ Outdated Software"
+    fi
   else
     debug 'skipping updating brews & casks'
   fi
   step_end
 
-  # strftime -s writes directly into _now — no $(date) subprocess fork.
-  local _now
-  strftime -s _now '%Y-%m-%d %H:%M:%S' "${EPOCHSECONDS}"
-  success "Finished software updates at $(purple "${_now}")"
+  # Compute duration using format_duration from .shellrc (already sourced via .aliases).
+  local _now _duration_human
+  current_timestamp _now
+  local _duration=$((EPOCHSECONDS - script_start_time))
+  format_duration "${_duration}" _duration_human
+
+  success "Finished software updates at $(purple "${_now}") in $(light_blue "${_duration_human}")"
+  notify "All updates finished at ${_now} (took ${_duration_human})." "✅ Software Updates Done"
   print_script_duration "${script_start_time}"
 }
 

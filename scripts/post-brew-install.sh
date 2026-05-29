@@ -3,7 +3,7 @@
 # vim:filetype=zsh syntax=zsh tabstop=2 shiftwidth=2 softtabstop=2 expandtab autoindent fileencoding=utf-8
 
 # This script runs post-bundle cleanup and plugin setup that cannot live in the
-# Brewfile itself because they require a full zsh environment (.shellrc functions).
+# Brewfile itself because they require a full shell environment (.aliases functions).
 #
 # Symlinks for Brewfile-managed casks (keybase, zed) live directly on their
 # 'cask' declarations via 'postinstall:' in the Brewfile — keeping each cask's
@@ -17,8 +17,8 @@
 # Exit immediately if a command exits with a non-zero status.
 set -euo pipefail
 
-# Re-source guard is inside .shellrc itself — safe to call unconditionally.
-source "${HOME}/.shellrc"
+# Re-source guard is inside .aliases itself — safe to call unconditionally.
+source "${HOME}/.aliases"
 
 main() {
   # Required for completions from other plugins (e.g. git-extras) to work

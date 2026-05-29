@@ -113,6 +113,8 @@ cask 'zoom'
 # mas 'PDFgear', id: 6469021132
 
 # VSCode extensions
+# Note: Retained as a reference in case of a future switch back to VSCode or VSCodium.
+# To re-enable: uncomment the is_vscode_installed guard and the extension lines below.
 # Note: I don't want brew to silently install VS Code (which is what it does currently if the following lines are present but it doesn't find the executable 'code'!)
 # is_vscode_installed = !`PATH="/opt/homebrew/bin:/usr/local/bin:${PATH}" which code`.chomp.empty?  # explicitly set PATH since the shell being opened doesn't run the login configs
 # if is_vscode_installed

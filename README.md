@@ -45,8 +45,13 @@ _Note:_
 
 In your forked repo, make the following changes, commit and push _via the Github web-UI itself_ (for the first time before running the script). Once the above steps are done, and committed into your fork, then everytime you need to run the setup, you can run the `curl` commands that point to _your_ fork:
 
-1. **_Only in this file (`README.md`), `GettingStarted.md` and `files/--HOME--/.shellrc` files (and nowhere else; only these 3 files in total):_** Find and replace the strings that reference my usernames to your equivalent ones (for eg, you can search for `vraravam` (referred to as the `GH_USERNAME` env var) and `avijayr` (referred to as the `KEYBASE_USERNAME` env var) and replace them with your values). If you are not going to use keybase (or are going to defer setting that up), please comment out the lines for the environment variables that start with `KEYBASE_` in the `files/--HOME--/.shellrc`.
+1. **_Only in this file (`README.md`), `GettingStarted.md` and `files/--HOME--/.shellrc` files (and nowhere else; only these 3 files in total):_** Find and replace the strings that reference my usernames to your equivalent ones (for eg, you can search for `vraravam` (referred to as the `GH_USERNAME` env var) and `avijayr` (referred to as the `KEYBASE_USERNAME` env var) and replace them with your values). If you are not going to use keybase (or are going to defer setting that up), please comment out the lines for the environment variables that start with `KEYBASE_` in the `files/--HOME--/.shellrc`. Additionally, review and update the following path-related env vars in `files/--HOME--/.shellrc` to match your preferred folder layout:
+   - `PROJECTS_BASE_DIR` (default: `${HOME}/dev`) — root folder where all your git repos will be cloned
+   - `PERSONAL_BIN_DIR` (default: `${HOME}/personal/dev/bin`) — folder for personal scripts and executables
+   - `PERSONAL_CONFIGS_DIR` (default: `${HOME}/personal/dev/configs`) — folder for private config files and repo catalogs
+   - `PERSONAL_PROFILES_DIR` (default: `${HOME}/personal/${USER}/browser-profiles`) — folder for browser profile backups
 2. Review all entries in the `files/--HOME--/Brewfile`, and ensure that there are no unwanted libraries/applications. If you have any doubts (if comparing with my [Brewfile](files/--HOME--/Brewfile)), you will need to search the internet for the uses of those libraries/applications and decide whether to retain each one or not.
+3. If you changed `PROJECTS_BASE_DIR` from its default (`~/dev`), update the corresponding entries in `files/--HOME--/custom.gitignore` — specifically the `/dev/` entry in the "HOME DIRECTORY TOP-LEVEL FOLDERS" section and all `/dev/**/` entries in the "DEV WORKSPACE" section. Prefer editing the repo source file directly, then run `install-dotfiles.rb` to propagate. If on a fresh machine the destination `~/.gitignore` already has your edits, set `FIRST_INSTALL=1` before running `install-dotfiles.rb` so the destination is treated as authoritative; otherwise `install-dotfiles.rb` uses mtime to decide which version wins (newer file wins; repo source wins on a tie).
 
 ## How to upgrade / catch-up to new changes
 
@@ -103,9 +108,10 @@ As a summary, these files will typically have changes between your setup and min
 
 - `GettingStarted.md` (references to your usernames instead of mine, and typically any other changes that you introduce in the `files/--HOME--/.shellrc` - look below)
 - `files/--HOME--/.gitconfig` (the `IncludeIf` line to match your global/base configuration filename)
-- `files/--HOME--/.shellrc` (`GH_USERNAME`, `KEYBASE_USERNAME`, and other changeable env vars to control which steps to perform vs which to bypass)
+- `files/--HOME--/.shellrc` (`GH_USERNAME`, `KEYBASE_USERNAME`, path env vars such as `PROJECTS_BASE_DIR` / `PERSONAL_CONFIGS_DIR` / `PERSONAL_BIN_DIR` / `PERSONAL_PROFILES_DIR`, and other changeable env vars to control which steps to perform vs which to bypass)
 - `files/--HOME--/Brewfile` (the list of applications and command-line utilities that you choose to install in your local machine)
-- `scripts/data/capture-prefs-domains.txt` (what application preferences that you choose to backup - based on the entries in the `Brewfile`)
+- `scripts/data/capture-prefs-allowed-list.txt` (the preference domains you choose to back up — add or remove entries to match your installed apps)
+- `scripts/data/capture-prefs-denied-list.txt` (domains that must never be exported or imported because they contain machine-specific identifiers, MDM tokens, or account-bound credentials — edit only if you need to add newly discovered unsafe domains; do not remove existing entries)
 
 # 🔄 Ongoing tasks to keep your backup up-to-date on a regular basis
 

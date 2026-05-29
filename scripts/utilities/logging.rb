@@ -185,6 +185,6 @@ module Logging
 
   # Formats +seconds+ as "Hh:MMm:SSs".
   def format_duration(seconds)
-    format('%dh:%02dm:%02ds', seconds / 3600, (seconds % 3600) / 60, seconds % 60)
+    format('%02dh:%02dm:%02ds', seconds / 3600, (seconds % 3600) / 60, seconds % 60)
   end
 end

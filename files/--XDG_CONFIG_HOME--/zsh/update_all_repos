@@ -22,9 +22,9 @@ _update_repo() {
   section_header2 "$(yellow 'Updating') $(purple "${folder}")"
   rm -rfv "${folder}/.git/index.lock" "${folder}/.git/hooks"
 
-  local _now
-  strftime -s _now '%Y-%m-%d %H:%M:%S' "${EPOCHSECONDS}"
-  git -C "${folder}" add "${relative_path}" && git -C "${folder}" sci "Incremental commit: ${_now}"
+  local human_date
+  current_timestamp human_date
+  git -C "${folder}" add "${relative_path}" && git -C "${folder}" sci "Incremental commit: ${human_date}"
 }
 
 # Updates the home and profiles repos

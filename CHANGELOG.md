@@ -2,7 +2,50 @@ As documented in the README's [adopting](README.md#how-to-adoptcustomize-the-scr
 
 For those who follow this repo, here's the changelog for ease of changelog:
 
-### 3.0.27
+### 3.1-1
+
+* *[.shellrc]* In the `info/error/debug/warn` functions, do not print anything if its being called from within `direnv`. This is to suppress the noisy logs when cd'ing to different directories.
+* *[scripts/install-dotfiles.rb]* `custom.git*` files now use mtime-based conflict resolution instead of always treating the destination as authoritative. On `FIRST_INSTALL` (env var set) the destination always wins (moved into repo, copied back). On subsequent runs, the newer file wins; source wins on a tie. `--force` bypasses mtime and always overwrites.
+* *[files/--HOME--/.gitconfig]* Made all aliases scripts POSIX-compatible.
+* *[files/--HOME--/custom.gitignore, files/--HOME--/custom.gitattributes, files/--PERSONAL_PROFILES_DIR--/custom.gitignore]* Header comments updated to document the mtime-based resolution rules and FIRST_INSTALL behaviour.
+* *[.shellrc → .aliases]* Moved 8 functions out of `.shellrc` into `.aliases` — reducing `.shellrc`'s curl-download payload and startup cost on a vanilla OS install.
+* *[.shellrc]* `set_ssh_folder_permissions`: updated comment to document both reasons it stays in `.shellrc` — (1) vanilla OS pre-`install-dotfiles.rb` bootstrap; (2) bash-compat: called from `.envrc` files evaluated by direnv in a bash subshell (`.aliases` cannot be sourced in bash).
+* *[scripts/software-updates-cron.sh]* Added ERR trap: calls `error()` (which triggers `notify`) on unexpected failure. Added profiles repo size check to notify if 2 GB threshold is breached.
+* *[scripts/software-updates-cron.sh]* Replace `home pull`, `oss upreb`, and `bcg` alias calls with direct equivalents (`run-all.sh`, `brew outdated --greedy`). Aliases are not expanded in non-interactive shells (cron), causing failures; direct invocations work in all contexts.
+* *[files/--HOME--/.envrc, files/--PERSONAL_PROFILES_DIR--/.envrc]* Added ERR trap to both `.envrc` files. On any unexpected failure, `notify()` fires an osascript notification with the filename and line number — visible even when the terminal is not in focus.
+* *[scripts/data/capture-prefs-denied-list.txt]* New file listing 44 domains that must never be exported/imported: device identity UUIDs, MDM enrollment tokens, Apple ID credentials, AirTag beacon MACs, CloudKit cache blobs, printer presets keyed to IP addresses, and ephemeral UI/OS-version state. This script now loads the denied-list into an associative array at startup; skips any allowed-listed domain that also appears in the denied-list with a `warn` message instead of silently exporting/importing machine-specific data.
+* *[scripts/data/capture-prefs-allowed-list.txt]* Removed all 44 denied-listed domains from the allowed-list.
+* *[files/--HOME--/.aliases]* `find_and_append_prefs`: checks each discovered domain against the denied-list before appending to the allowed-list; prints a `warn` and skips rather than adding a denied-listed domain.
+* *[files/--HOME--/.aliases]* `recron` now reads from the existing `${PERSONAL_CONFIGS_DIR}/crontab.txt` instead of regenerating it from a hardcoded template every time. `_create_crontab` is now a bootstrap-only seed — called only when `crontab.txt` does not exist yet (vanilla OS scenario).
+* *[files/--HOME--/.shellrc]* `notify` now strips ANSI escape codes from the message before passing to `osascript`, preventing raw escape sequences from appearing as literal characters in macOS notifications. Uses inline zsh parameter expansion (`(S)` flag + extendedglob) instead of a `sed` subshell — avoids ERR trap inheritance into `$(...)` subshells where shell functions like `current_timestamp` are unavailable. Uses `setopt local_options extendedglob` to ensure `##` works correctly in non-interactive shells (cron) where `extendedglob` is off by default.
+* *[files/--HOME--/.gitconfig]* `git cc`: accept `--expire=<when>` to override the reflog expiry (default remains `1.week.ago`). Uses `--expire=` flag style (matching `git reflog expire`'s own interface) so the zsh autoload passes it through `switches` with zero extra code. Examples: `git cc --expire=now`, `git cc --expire=3.days.ago`.
+* *[files/--HOME--/.gitconfig]* `git rfc`: rewrote as a `!f()` shell function; uses `git for-each-ref` to enumerate `refs/heads`, `refs/remotes`, and `refs/tags` explicitly instead of `--all`, so `refs/stash` is never expired and stashes are preserved.
+* *[files/--HOME--/.gitconfig]* `git cc`: replaced `--all` in `reflog expire` with an explicit `git for-each-ref` enumeration of `refs/heads`, `refs/remotes`, and `refs/tags` — stashes are now preserved across all cleanup operations.
+* *[files/--HOME--/.gitconfig]* `git sci`: replaced locale-dependent `grep "to unstage"` staging detection with `git diff --cached --quiet` — robust across all git locales.
+* *[files/--HOME--/.gitconfig]* `git relative-path`: fixed broken `git root` reference (alias never existed) and corrected path resolution to use `realpath` + `git rev-parse --show-toplevel` with proper absolute-path stripping. The old implementation was silently producing wrong output.
+* *[files/--HOME--/.gitconfig]* `git fo`: removed redundant `--all` and `--tags` flags — `fetch.all=true`, `fetch.prune=true`, and `fetch.pruneTags=true` in config make plain `git fetch` equivalent.
+* *[files/--HOME--/.gitconfig]* `git se`: added `-z`/`-0` to `rev-list`/`xargs` pipeline for null-safe handling of filenames containing spaces.
+* *[files/--HOME--/.gitconfig]* `git standup`: now defaults author to `git config user.name` when called with no argument.
+* *[files/--HOME--/.gitconfig]* `git rpo`: added comment noting it is a no-op after any fetch due to `fetch.prune=true`, but remains useful as an explicit one-shot command.
+* *[files/--XDG_CONFIG_HOME--/zsh/cc]* Updated header documentation to reflect `--expire` flag, default behaviour, `--stale-fix`, and `--dry-run` example.
+* *[.github/instructions/shell-scripting.instructions.md, .github/copilot-instructions.md]* Sharpened `shfmt` formatting rules: added explicit "check `.shfmtignore` first" directive, concrete before/after example of the `while true; do ...; done` one-liner corruption bug, and explanation that running `shfmt` on an excluded file corrupts intentional one-liners with no inline suppression escape.
+* *[.shellrc]* `info` and `success` are now suppressed when `DIRENV_DIR` is set (i.e. running inside a direnv subshell evaluating an `.envrc`). `warn` and `error` always print. Cron jobs, CI, and interactive shells are unaffected. This silences routine `.envrc` log output from direnv without losing actionable messages.
+* *[scripts/fresh-install-of-osx.sh]* Added `set -E` immediately after `set -euo pipefail` so the existing `_cleanup_and_exit` ERR trap is inherited by all helper functions defined in the file — previously a failure inside a helper would not trigger the trap.
+* *[scripts/fresh-install-of-osx.sh]* Fixed dead `$?` check after `brew bundle`. Uncommented `resurrect_tracked_repos` (now runs automatically, synchronously, before `allow_all_direnv_configs` and `install_mise_versions` so repos exist before those sweep). DNS fallback changed from `8.8.8.8` to `1.1.1.1`.
+* *[.github/copilot-instructions.md]* `custom.git*` exception block rewritten with FIRST_INSTALL / mtime resolution rules. `.shellrc` vs `.aliases` decision rule rewritten: clarifies the `install-dotfiles.rb` boundary, bash-compat reason for `.shellrc` retention, and lists zsh-autoload functions as `.aliases` candidates.
+* *[.github/instructions/git-config.instructions.md, Extras.md]* `custom.git*` handling descriptions updated to reflect mtime-based resolution rules.
+
+#### Adopting these changes
+
+* Rebase from upstream, resolve conflicts, and then run in any open terminal:
+
+  ```bash
+  install-dotfiles.rb
+  ```
+
+* Quit and restart the Terminal application.
+
+### 3.0.27 (3.1)
 
 * *[.shellrc]* Fixed `${(j.:.)RUBYLIB_PATHS}` bad substitution error when sourced by non-zsh runtimes (e.g. direnv). Wrapped the `RUBYLIB` block in `is_zsh` guard; updated comment to explain the direnv/bash incompatibility.
 * *[.shellrc]* Added `RUBYLIB` setup to point to `scripts/utilities/` so Ruby scripts can `require` shared utilities by name without `require_relative`.
@@ -22,14 +65,14 @@ For those who follow this repo, here's the changelog for ease of changelog:
 
 #### Adopting these changes
 
-* Rebase from upstream, resolve conflicts, and then run in all open terminals:
+* Rebase from upstream, resolve conflicts, and then run in any open terminal:
 
   ```bash
   rm -rf "${HOME}/.default-gems"
   install-dotfiles.rb
   ```
 
-* Quit and restart the Terminal application (a full restart is required — sourcing in-place leaves old OMZ functions in memory).
+* Quit and restart the Terminal application.
 
 ### 3.0.26
 
@@ -45,7 +88,7 @@ For those who follow this repo, here's the changelog for ease of changelog:
 
 #### Adopting these changes
 
-* Rebase from upstream, resolve conflicts, and then proceed with the following steps in all open terminals:
+* Rebase from upstream, resolve conflicts, and then proceed with the following steps in any open terminal:
 
    ```bash
    cp $DOTFILES_DIR/files/--HOME--/custom.gitattributes $HOME/.gitattributes
@@ -53,7 +96,7 @@ For those who follow this repo, here's the changelog for ease of changelog:
    install-dotfiles.rb
   ```
 
-* Quit and restart the Terminal application (a full restart is required — sourcing in-place leaves old OMZ functions in memory).
+* Quit and restart the Terminal application.
 
 ### 3.0.25
 
@@ -71,7 +114,7 @@ For those who follow this repo, here's the changelog for ease of changelog:
 
 #### Adopting these changes
 
-* Rebase from upstream, resolve conflicts, and then proceed with the following steps in all open terminals:
+* Rebase from upstream, resolve conflicts, and then proceed with the following steps in any open terminal:
 
    ```bash
    cp $DOTFILES_DIR/files/--HOME--/custom.gitignore $HOME/.gitignore
@@ -255,7 +298,7 @@ For those who follow this repo, here's the changelog for ease of changelog:
 * *[.zshrc]* Added `gnu-tar` to the list of keg-only Homebrew packages that override macOS defaults. Removed the `git_scripts` path addition.
 * *[.envrc (profiles)]* Temporarily disabled natsumi-browser cloning as a trial. Removed `timeout` wrapper from `add-upstream-git-config.sh` call.
 * *[software-updates-cron.sh]* Temporarily disabled natsumi codebase update block as a trial.
-* *[Brewfile]* Added `Mechvibes` since Haptyk turned out to be payware after some days. Removed `Haptyk` from `capture-prefs-domains.txt` and added `Mechvibes`.
+* *[Brewfile]* Added `Mechvibes` since Haptyk turned out to be payware after some days. Removed `Haptyk` from `capture-prefs-allowed-list.txt` and added `Mechvibes`.
 * *[GettingStarted.md]* Updated bootstrap one-liner to use `FIRST_INSTALL` instead of the old `HOMEBREW_BASE_INSTALL` variable name.
 * *[.shellrc]* Added `ServerAliveInterval=10` and `ServerAliveCountMax=3` SSH options to the `submodule update` call in `clone_repo_into` to prevent silent hangs on flaky connections.
 * *[.aliases]* Updated `grep`/`fgrep`/`egrep` aliases: removed VCS dirs from `--exclude-dir` (since Homebrew `grep` handles them natively) and added `*.zwc*` / `.*.zwc*` to `--exclude` patterns. Removed `--all` flag from `bupc`'s `brew bundle` call. Added `allow_all_direnv_configs` and `install_mise_versions` calls inside `resurrect_tracked_repos`.
@@ -821,7 +864,7 @@ For those who follow this repo, here's the changelog for ease of changelog:
 * *[software-updates-cron.sh]* Removed parallelism (something that was introduced in the previous version when optimzing using gemini) - since this was causing lots of confusion when looking through the logs.
 * *[gitconfig]* Removed `editor` config setting since that's already being governed by the env var `EDITOR` set from `~/.zshrc`.
 * *[Brewfile]* Removed unused tools / added new tools.
-* *[capture-prefs-domains.txt]* Added entries to capture PdfGear, TinkerTool, UTM.
+* *[capture-prefs-allowed-list.txt]* Added entries to capture PdfGear, TinkerTool, UTM.
 * Removed partial line comments from the other config data files since they are inconsistent/might cause issues when parsing / applying them during the cleanup steps.
 
 ### 1.1-16
@@ -829,8 +872,8 @@ For those who follow this repo, here's the changelog for ease of changelog:
 * Ran gemini to optimize the shell configuration scripts aimed at optimizing the shell startup time.
 * Renamed 'scripts/capture-defaults.sh' to 'scripts/capture-prefs.sh'
 * Extracted 'setup_login_item' function from `~/.aliases` into a standalone script so as to avoid issues between bash vs zsh when running `postinstall` step in Brewfile.
-* *[capture-prefs.sh]* Extracted the whitelist of preferences into a separate file: [capture-prefs-domains.txt](./scripts/data/capture-prefs-domains.txt).
-* *[cleanup-browser-profiles.sh]* Extracted the whitelist of [files](./scripts/data/cleanup-browser-files.txt) and [directories](./scripts/data/cleanup-browser-dirs.txt) that needs to be cleaned into separate files.
+* *[capture-prefs.sh]* Extracted the allowed-list of preferences into a separate file: [capture-prefs-allowed-list.txt](./scripts/data/capture-prefs-allowed-list.txt).
+* *[cleanup-browser-profiles.sh]* Extracted the allowed-list of [files](./scripts/data/cleanup-browser-files.txt) and [directories](./scripts/data/cleanup-browser-dirs.txt) that needs to be cleaned into separate files.
 
 *Note*: This version has been successfully tested on a Macbook M1 on 2 May, 2025.
 
@@ -1067,7 +1110,7 @@ These changes are *optional*, but if you don't follow them, then the aliases/scr
 
 ### 1.0-34
 
-* Set the DNS server to '8.8.8.8' only if running in a Jio network.
+* Set the DNS server to '1.1.1.1' only if running in a Jio network.
 * Introduce PDFGear and KeyClu.
 * Fixed some old documentation.
 

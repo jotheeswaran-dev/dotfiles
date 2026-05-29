@@ -37,12 +37,20 @@ resolved directory. This means:
 
 Exception: files matching `custom.git*` (e.g. `custom.gitattributes`) are **copied**
 rather than symlinked, because git does not handle symlinks well for its own core config.
-Always edit the `custom.git*` source file, never the copied target.
+Resolution when both the source and the destination exist as real files:
+- `FIRST_INSTALL` set: pre-existing destination always wins — moved into dotfiles repo,
+then copied back.
+- Otherwise: the file with the **newer mtime** wins. On a tie, the dotfiles repo wins.
+Prefer editing the `custom.git*` source file in the dotfiles repo. If you edit the
+destination directly, ensure its mtime is newer before re-running `install-dotfiles.rb`.
 
 The three primary script directories referenced throughout:
 - `$DOTFILES_DIR`     = `${HOME}/.config/dotfiles`
 - `$PERSONAL_BIN_DIR` = `${HOME}/personal/dev/bin`
 - `$PERSONAL_CONFIGS_DIR` = `${HOME}/personal/dev/configs`
+
+Except for adding/updating entries into the `CHANGELOG.md`, all actions need to be
+performed in all relevant files in all the above 3 folders and their nested children.
 
 ---
 
@@ -70,8 +78,11 @@ the tradeoff in a comment when they conflict.
    `(( $+functions[...] ))`, `${(j::)arr}`, etc.) and document why the
    zsh-specific syntax was chosen.
 
-Note: priorities 3 and 4 only apply to zsh scripts. `.envrc` files are
+Note: 
+1. Priorities 3 and 4 only apply to zsh scripts. `.envrc` files are
 evaluated by direnv in a bash subshell and must use POSIX syntax exclusively.
+2. Similarly, the git aliases section might use sh or bash and should be
+POSIX syntax exclusively.
 
 ---
 
@@ -108,10 +119,42 @@ Everything that is not needed in the pre-clone window should live in `.aliases`,
 not `.shellrc`.
 
 Decision rule when placing a new function:
-- **`.shellrc`** — required on a vanilla OS before the dotfiles repo is cloned
-  (e.g. `suspend_cron`, `resume_cron`, `clone_repo_into`, `ensure_keybase_logged_in`
-  would be wrong here — see Keybase note below).
+- **`.shellrc`** — required if the function is called during a vanilla OS
+  fresh-install **before `install-dotfiles.rb` creates the `.aliases` symlink**.
+  The precise boundary is `install-dotfiles.rb` in `main()` of
+  `fresh-install-of-osx.sh`. Within a vanilla OS run, `$DOTFILES_DIR/scripts/`
+  exists and is in PATH from the moment the dotfiles repo is cloned, but
+  `~/.aliases` does not exist until `install-dotfiles.rb` finishes — so scripts
+  in `$DOTFILES_DIR/scripts/` that are invoked in this window (between repo
+  clone and `install-dotfiles.rb`) must also source `.shellrc`, not `.aliases`.
+  Examples that belong here: `suspend_cron`, `resume_cron`, `clone_repo_into`,
+  `keep_sudo_alive`, `set_ssh_folder_permissions`, `eval_shellenv`,
+  `load_zsh_configs`, `print_usage`, `get_git_config_value`.
+  Note: `add-upstream-git-config.sh` is invoked inside `_clone_dot_files_repo`
+  (before `install-dotfiles.rb`), so any function it uses must be in `.shellrc`.
 - **`.aliases`** — everything else; available once dotfiles are symlinked.
+  This includes:
+  - Functions only used by scripts in `$PERSONAL_BIN_DIR` or
+    `$PERSONAL_CONFIGS_DIR` — those directories never exist on a vanilla OS
+    before the dotfiles repo is cloned, so they are never in the boot path.
+  - Functions used by scripts in `$DOTFILES_DIR/scripts/` that are only called
+    **after** `install-dotfiles.rb` runs (e.g. `post-brew-install.sh`,
+    `osx-defaults.sh`, `capture-prefs.sh`, `setup-login-item.sh`, `run-all.sh`,
+    `software-updates-cron.sh`, `recreate-repo.sh`).
+  - zsh autoload functions (the scripts under `$ZDOTDIR/functions/` and
+    `$XDG_CONFIG_HOME/zsh/`) — these are only ever invoked in an interactive
+    zsh session, well after all dotfiles are in place.
+  The sourcing choice for all of the above is governed solely by the
+  "source the tightest file" rule, not by the vanilla OS constraint.
+
+Note on `.envrc` files: `.envrc` files are evaluated by direnv in a **bash**
+subshell. They must source `.shellrc` (not `.aliases`) because `.aliases`
+contains extensive zsh-only syntax (`(N.)` globs, `:h`, `:A`, `((@on))`,
+`(($+...))` etc.) that is not bash-compatible. This is a **bash compatibility**
+constraint, not a hotpath or startup-speed concern. Any function that is called
+from a `.envrc` file and is not already in `.shellrc` for bootstrap reasons must
+be kept in `.shellrc` for bash-compat reasons — add a comment on that function
+explaining this (see `set_ssh_folder_permissions` for the pattern).
 
 Avoid the temptation to put convenience functions in `.shellrc` just because
 `.shellrc` is always loaded. Every extra function added to `.shellrc`
@@ -237,6 +280,30 @@ All shell scripts use `set -euo pipefail`. Guard positional parameters with
 - `source` vs `load_file_if_exists`: use `load_file_if_exists` after `.shellrc`
   is sourced; use raw `[[ -f ]]` + `source` before `.shellrc` is available.
 
+### No Aliases in Non-Interactive Scripts
+
+Zsh disables alias expansion in non-interactive shells (scripts, cron jobs,
+`zsh -c`, `zsh -lsc`). **Never call an alias by name inside a script** — use
+the underlying command or function it expands to. Also replace any
+`command_exists <alias>` guard with a check against the real executable:
+
+```zsh
+# BAD — aliases not expanded in non-interactive shells
+home pull
+oss upreb
+if command_exists bcg; then
+  bcg | grep ...
+
+# Good — direct equivalents
+FOLDER="${HOME}" FILTER='.bin|.dotfiles|zsh|mise' MAXDEPTH=5 run-all.sh git pull
+FOLDER="${PROJECTS_BASE_DIR}/oss" MAXDEPTH=4 run-all.sh git upreb
+if command_exists brew; then
+  # 'bcg' alias (brew outdated --greedy) is not expanded in non-interactive shells.
+  brew outdated --greedy | grep ...
+```
+
+Add a comment at each call site noting why the alias is not used.
+
 ---
 
 ## Ruby Scripting Rules
@@ -287,9 +354,12 @@ with Ruby 2.6. Do NOT use homebrew-managed Ruby for `$DOTFILES_DIR` scripts.
 
 ### Aliases in `~/.gitconfig`
 
-- Aliases that use shell features must use `!sh -c '...'` or `!git` prefix.
+- Aliases that use shell features must use `!sh -c '...' -` or `!git` prefix.
 - For `-C <dir>` support: `!sh -c 'git -C "${1:-.}" ...' -`.
-- `git sci`: stage + commit interactive — must NOT amend if diverged.
+- The trailing `-` sets `$0`; user args start at `$1`. Never use `$0` for user args.
+- For multi-step logic, use `!f()` named function pattern: `"!f() { ...; }; f"`.
+- `git sci`: smart commit, **non-interactive** — takes a message arg; amends (`git amq`) if ahead of remote and not diverged, otherwise creates a new commit (`git ci`). Aborts if nothing staged. Use `git diff --cached --quiet` (not locale-dependent `grep "to unstage"`).
+- `git cc` / `git rfc`: **never use `--all`** in `reflog expire` — it discards stashes. Always enumerate refs explicitly with `git for-each-ref refs/heads refs/remotes refs/tags`.
 - `fetch.fsckObjects = false` enforced in antidote bundle repo git configs
   (ohmyzsh, fast-syntax-highlighting) — `fetch` only, not `receive`/`transfer`.
 
@@ -339,6 +409,11 @@ defined in `.aliases`.
 Run `shfmt -w <file>` after every edit to a shell script. See
 `shell-scripting.instructions.md` for the full rules on `.shfmtignore` and
 the two valid reasons for excluding a file.
+
+**Check `.shfmtignore` before running `shfmt`.** If the file is listed there,
+do NOT run `shfmt` on it — skip formatting entirely. Running `shfmt` on an
+excluded file corrupts intentional one-liners (e.g. `while true; do ...; done`
+expanded into misaligned multi-line form with no way to suppress it inline).
 
 ### Ruby Formatting
 
@@ -437,3 +512,20 @@ else
   # ... run find traversal ...
 fi
 ```
+
+---
+
+## CHANGELOG
+
+Each new CHANGELOG entry must use the output of `git describe --tags` (run from
+`$DOTFILES_DIR`) as the section header. This ensures the version number always
+matches the most recent git tag:
+
+```zsh
+git describe --tags   # e.g. "3.1" — use this as the ### header
+```
+
+- Add the new entry at the **top** of `CHANGELOG.md`, above all existing entries.
+- Use `### <version>` as the section heading (e.g. `### 3.1`).
+- Each bullet should be scoped with `*[file or component]*` and describe the
+  change succinctly — what was done and why, not how.

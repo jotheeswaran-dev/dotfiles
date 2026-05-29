@@ -2,13 +2,25 @@
 
 # vim:filetype=zsh syntax=zsh tabstop=2 shiftwidth=2 softtabstop=2 expandtab autoindent fileencoding=utf-8
 
-# git command: cc
+# Compresses a git repo and reclaims disk space (prune, repack, gc).
+# Wraps 'git cc'. All --flags are forwarded to 'git reflog expire'.
+#
+# Usage: cc [<folder>] [--expire=<when>] [<extra-reflog-flags>]
+#
+# --expire defaults to 1.week.ago and applies to both reachable and unreachable
+# entries (rebases, amends, deleted branches). --stale-fix is always applied.
+#
+# Examples:
+#   cc                          # current dir, expire=1.week.ago
+#   cc /path/to/repo            # explicit folder, expire=1.week.ago
+#   cc --expire=now             # expire entire reflog immediately
+#   cc /path/to/repo --expire=3.days.ago
+#   cc --dry-run                # preview what would be pruned
 
 # Source shell helpers if they aren't already loaded
 # Re-source guard is inside .shellrc itself — safe to call unconditionally.
 source "${HOME}/.shellrc"
 
-# Note: Use a function so that it can accept parameters
 _cc() {
   local folder
   local -a switches

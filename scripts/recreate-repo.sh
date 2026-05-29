@@ -113,7 +113,9 @@ main() {
 
     rm -f "${folder}/.git/index.lock"
     git -C "${folder}" add -A .
-    git -C "${folder}" commit -qm "Initial commit: $(strftime '%Y-%m-%d %H:%M:%S' ${EPOCHSECONDS})"  # strftime — no $(date) fork
+    local human_date
+    current_timestamp human_date
+    git -C "${folder}" commit -qm "Initial commit: ${human_date}"
   fi
 
   # Retry the commit in case it failed the first time

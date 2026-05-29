@@ -6,7 +6,9 @@
 # It can be invoked from any location as long as its in the PATH (and you don't need to specify the fully qualified name while invoking it).
 # It can handle nested files.
 # If there is already a real file (not a symbolic link), then the script will move that file into this repo, and then create the corresponding symlink. This helps preserve the current settings from the user without forcefully overriding from my repo.
-# Special handling (rename + copy instead of symlink) for '.gitattributes' and '.gitignore'
+# Special handling (copy instead of symlink) for 'custom.git*' files (.gitignore, .gitattributes, etc.):
+#   - On FIRST_INSTALL (FIRST_INSTALL env var is set): target always wins — moved into repo, then repo is copied back.
+#   - Otherwise: mtime determines the winner. Target newer → moved into repo. Source newer or same age → target overwritten.
 # To run it, just invoke by `install-dotfiles.rb` if this folder is already setup in the PATH
 
 # It assumes the following:
@@ -41,8 +43,9 @@ DOTFILES_ROOT_PATH = Pathname.new(__dir__).join('..', 'files').expand_path
 # Parse command-line options
 options = { dry_run: false, verbose: false, force: false }
 CliParser.parse('[options]') do |opts|
-  opts.separator 'Installs dotfiles from this repo into the home folder by creating symlinks (or copying for .gitattributes/.gitignore).'
-  opts.separator 'If a real file already exists at the target, it is moved into the repo first, then symlinked.'
+  opts.separator 'Installs dotfiles from this repo into the home folder by creating symlinks (or copying for custom.git* files).'
+  opts.separator 'For non-custom-git files: if a real file already exists at the target it is moved into the repo first, then symlinked.'
+  opts.separator 'For custom.git* files: on FIRST_INSTALL the target always wins; otherwise mtime determines which version is authoritative.'
   opts.separator ''
   opts.on('-n', '--dry-run', 'Show what would be symlinked/copied without making any changes') do
     options[:dry_run] = true
@@ -105,6 +108,9 @@ def _process_dotfile(source_pn, target_pn, dry_run: false, verbose: false, force
     return
   end
 
+  is_custom_git = source_pn.basename.to_s.match?(CUSTOM_GIT_FILENAME_PATTERN)
+  first_install = ENV.fetch('FIRST_INSTALL', '').strip != ''
+
   # Check target status before deciding action
   if target_pn.symlink?
     info("  Target '#{target_path}' exists as a symlink, will overwrite.") if verbose
@@ -113,9 +119,21 @@ def _process_dotfile(source_pn, target_pn, dry_run: false, verbose: false, force
     if force
       info("  Forcefully overwriting existing file '#{target_path}'") if verbose
       FileUtils.rm_rf(target_pn) unless dry_run
+    elsif is_custom_git && !first_install
+      # mtime-based resolution: whichever file was modified more recently is authoritative.
+      # On a tie, source wins (repo is authoritative on re-runs).
+      target_mtime = target_pn.mtime
+      source_mtime = source_pn.mtime
+      if target_mtime > source_mtime
+        info("  Target '#{target_path}' is newer (#{target_mtime} > #{source_mtime}); adopting it into repo and re-copying")
+        FileUtils.mv(target_pn, source_pn, force: true) unless dry_run
+      else
+        info("  Source '#{source_path}' is newer or same age (#{source_mtime} >= #{target_mtime}); overwriting target") if verbose
+        FileUtils.rm_rf(target_pn) unless dry_run
+      end
     else
+      # FIRST_INSTALL, or a non-custom-git file: target is always authoritative — move it into repo.
       info("  Moving existing file '#{target_path}' to '#{source_path}' (it will become the new version in your dotfiles repo)") if verbose
-      # Move the existing file from target to the source location in the dotfiles repo
       FileUtils.mv(target_pn, source_pn, force: true) unless dry_run
     end
     STATS.updated += 1
@@ -126,8 +144,8 @@ def _process_dotfile(source_pn, target_pn, dry_run: false, verbose: false, force
   end
 
   # Create symlink or copy file for files matching 'custom.git'
-  if source_pn.basename.to_s.match?(CUSTOM_GIT_FILENAME_PATTERN) # Special handling for git files, match on filename
-    info("  Copying #{source_path} to #{target_path}") if verbose
+  if is_custom_git # Special handling for git files: copy instead of symlink
+    info("  Copying '#{source_path}' to '#{target_path}'")
     FileUtils.cp(source_pn, target_pn) unless dry_run
   else
     info("  Creating symlink from '#{source_path}' to '#{target_path}'")
@@ -208,4 +226,4 @@ puts "  Errors:    #{STATS.errors.positive? ? STATS.errors.to_s.red : STATS.erro
 
 _ensure_ssh_include_line
 
-warn("Since the '.gitignore' and '.gitattributes' files are COPIED over, any new changes being pulled in (from a newer version of the upstream repo) need to be manually reconciled between this repo and your home and profiles folders")
+warn("Since 'custom.git*' files are COPIED (not symlinked), always edit the repo source first. When re-running without FIRST_INSTALL set, the newer file wins — so a stale home-dir copy can silently overwrite repo changes if its mtime is newer.")
