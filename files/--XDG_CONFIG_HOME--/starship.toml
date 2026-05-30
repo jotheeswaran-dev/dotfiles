@@ -7,7 +7,7 @@
 #
 # Colors:
 #   os_icon:   bg=white,  fg=#000000 (explicit black to avoid terminal remapping)
-#   directory: bg=blue,   fg=#e4e4e4 (repo root anchor in bright-white bold)
+#   directory: bg=#008080 (teal), fg=#e4e4e4 (repo root anchor in bright-white bold)
 #   git clean: bg=green,  fg=black
 #   git dirty: bg=yellow, fg=black  (any modified/staged/untracked/stashed files)
 #   status:    ✔ bold green / ✘ bold red (no background, right prompt)
@@ -25,19 +25,24 @@
 add_newline = true
 # Raised from default 500ms to allow du (git_size) to complete on large repos
 command_timeout = 5000
+# Per-module file-system scan budget; protects against slow directories
+scan_timeout = 30
+# Prompt prefix on continuation lines (e.g. unclosed quotes, multi-line if/for)
+continuation_prompt = "[❯❯ ](bold yellow)"
 
 # ── Left prompt ───────────────────────────────────────────────────────────────
 # Segment order: os → directory → git branch+status+size → prompt character
-# Arrow separators transition: white→blue→green(clean)/yellow(dirty)→terminal default
+# Arrow separators transition: white→teal→green(clean)/yellow(dirty)→terminal default
 format = """
 [$os](bg:white fg:black)\
-[\uE0B0](fg:white bg:blue)\
-[$directory](bg:blue fg:#e4e4e4)\
+[\uE0B0](fg:white bg:#008080)\
+[$directory](bg:#008080 fg:#e4e4e4)\
 ${custom.git_clean_sep}${custom.git_dirty_sep}\
 ${custom.git_clean}${custom.git_dirty}\
 ${custom.git_size}${custom.git_size_dirty}\
 ${custom.git_clean_end}${custom.git_dirty_end}\
 ${custom.git_state}\
+$mise$direnv
 $character"""
 
 # ── Right prompt ──────────────────────────────────────────────────────────────
@@ -59,7 +64,7 @@ palette = "rainbow"
 [palettes.rainbow]
 color_os        = "white"
 color_os_fg     = "black"
-color_dir       = "blue"
+color_dir       = "#008080"
 color_dir_fg    = "color254"   # resolves to #e4e4e4
 color_git       = "green"
 color_git_fg    = "black"
@@ -83,7 +88,7 @@ Macos = "\uF179"   # nerd font apple icon
 # ── Directory ─────────────────────────────────────────────────────────────────
 # Full path from ~ with no truncation (truncation_length=100 is effectively unlimited).
 # Repo root segment is highlighted in bright-white bold (anchor styling).
-# All path components share the blue background via repo_root_format.
+# All path components share the teal background via repo_root_format.
 [directory]
 format = "[ $path ]($style)[$read_only]($read_only_style)"
 style = "bg:color_dir fg:color_dir_fg bold"
@@ -173,11 +178,19 @@ time_format = "%I:%M:%S %p"
 use_12hr = true
 
 # ── Prompt character ──────────────────────────────────────────────────────────
-# ❯ in green on success, red on error. ❮ in vi command mode.
+# Vi-mode aware (mirrors the old p10k vi-mode prompt indicators):
+#   ❯ green  — insert mode, last command succeeded
+#   ❯ red    — insert mode, last command failed
+#   ❮ green  — normal (vicmd) mode
+#   V yellow — visual mode
+#   R red    — replace mode
 [character]
 success_symbol = "[❯](bold green)"
 error_symbol = "[❯](bold red)"
 vimcmd_symbol = "[❮](bold green)"
+vimcmd_visual_symbol = "[V](bold yellow)"
+vimcmd_replace_symbol = "[R](bold red)"
+vimcmd_replace_one_symbol = "[R](bold red)"
 
 # ── Custom: git segments with conditional green/yellow background ─────────────
 # The git section uses green bg when the repo is clean and yellow bg when dirty
@@ -187,7 +200,7 @@ vimcmd_symbol = "[❮](bold green)"
 # is dirty; the `when` condition below succeeds (exit 0) only in the target state.
 #
 # Each state has three parts:
-#   *_sep  — the blue→color powerline left-arrow separator
+#   *_sep  — the teal→color powerline left-arrow separator
 #   *      — branch icon + branch name + status symbols
 #   *_end  — the trailing color→default powerline left-arrow separator
 #
@@ -197,9 +210,9 @@ vimcmd_symbol = "[❮](bold green)"
 # Dirty state: shown when `git status --porcelain` produces any output
 [custom.git_dirty_sep]
 command = "true"
-when = "git --no-optional-locks rev-parse --is-inside-work-tree 2>/dev/null | grep -q true && git --no-optional-locks status --porcelain 2>/dev/null | grep -q ."
+when = "git --no-optional-locks rev-parse --is-inside-work-tree 2>/dev/null | grep -q true && [ \"$(git --no-optional-locks rev-parse --show-toplevel 2>/dev/null)\" != \"$HOME\" ] && git --no-optional-locks status --porcelain 2>/dev/null | grep -q ."
 format = "[\uE0B0]($style)"
-style = "fg:blue bg:yellow"
+style = "fg:#008080 bg:yellow"
 ignore_timeout = true
 
 [custom.git_dirty]
@@ -224,7 +237,7 @@ status_str=""
 [ "$behind" -gt 0 ] && [ "$ahead" -eq 0 ] && status_str="${status_str}⇣${behind}"
 [ -n "$status_str" ] && printf ' \uf126 %s %s \n' "$branch" "$status_str" || printf ' \uf126 %s \n' "$branch"
 """
-when = "git --no-optional-locks rev-parse --is-inside-work-tree 2>/dev/null | grep -q true && git --no-optional-locks status --porcelain 2>/dev/null | grep -q ."
+when = "git --no-optional-locks rev-parse --is-inside-work-tree 2>/dev/null | grep -q true && [ \"$(git --no-optional-locks rev-parse --show-toplevel 2>/dev/null)\" != \"$HOME\" ] && git --no-optional-locks status --porcelain 2>/dev/null | grep -q ."
 format = "[$output]($style)"
 style = "bg:yellow fg:black"
 ignore_timeout = true
@@ -232,9 +245,9 @@ ignore_timeout = true
 # Clean state: shown when inside a git repo but working tree is clean
 [custom.git_clean_sep]
 command = "true"
-when = "git --no-optional-locks rev-parse --is-inside-work-tree 2>/dev/null | grep -q true && ! git --no-optional-locks status --porcelain 2>/dev/null | grep -q ."
+when = "git --no-optional-locks rev-parse --is-inside-work-tree 2>/dev/null | grep -q true && [ \"$(git --no-optional-locks rev-parse --show-toplevel 2>/dev/null)\" != \"$HOME\" ] && ! git --no-optional-locks status --porcelain 2>/dev/null | grep -q ."
 format = "[\uE0B0]($style)"
-style = "fg:blue bg:green"
+style = "fg:#008080 bg:green"
 ignore_timeout = true
 
 [custom.git_clean]
@@ -250,7 +263,7 @@ status_str=""
 [ "$behind" -gt 0 ] && [ "$ahead" -eq 0 ] && status_str=" ⇣${behind}"
 printf ' \uf126 %s%s \n' "$branch" "$status_str"
 """
-when = "git --no-optional-locks rev-parse --is-inside-work-tree 2>/dev/null | grep -q true && ! git --no-optional-locks status --porcelain 2>/dev/null | grep -q ."
+when = "git --no-optional-locks rev-parse --is-inside-work-tree 2>/dev/null | grep -q true && [ \"$(git --no-optional-locks rev-parse --show-toplevel 2>/dev/null)\" != \"$HOME\" ] && ! git --no-optional-locks status --porcelain 2>/dev/null | grep -q ."
 format = "[$output]($style)"
 style = "bg:green fg:black"
 ignore_timeout = true
@@ -260,14 +273,14 @@ ignore_timeout = true
 # Two variants to match the dirty (yellow) or clean (green) git segment background.
 [custom.git_size]
 command = "git rev-parse --show-toplevel 2>/dev/null | xargs -I{} du -sh {}/.git 2>/dev/null | cut -f1"
-when = "git --no-optional-locks rev-parse --is-inside-work-tree 2>/dev/null | grep -q true && ! git --no-optional-locks status --porcelain 2>/dev/null | grep -q ."
+when = "git --no-optional-locks rev-parse --is-inside-work-tree 2>/dev/null | grep -q true && [ \"$(git --no-optional-locks rev-parse --show-toplevel 2>/dev/null)\" != \"$HOME\" ] && ! git --no-optional-locks status --porcelain 2>/dev/null | grep -q ."
 format = "[ $output]($style)"
 style = "bg:green fg:black"
 ignore_timeout = true
 
 [custom.git_size_dirty]
 command = "git rev-parse --show-toplevel 2>/dev/null | xargs -I{} du -sh {}/.git 2>/dev/null | cut -f1"
-when = "git --no-optional-locks rev-parse --is-inside-work-tree 2>/dev/null | grep -q true && git --no-optional-locks status --porcelain 2>/dev/null | grep -q ."
+when = "git --no-optional-locks rev-parse --is-inside-work-tree 2>/dev/null | grep -q true && [ \"$(git --no-optional-locks rev-parse --show-toplevel 2>/dev/null)\" != \"$HOME\" ] && git --no-optional-locks status --porcelain 2>/dev/null | grep -q ."
 format = "[ $output]($style)"
 style = "bg:yellow fg:black"
 ignore_timeout = true
@@ -275,14 +288,14 @@ ignore_timeout = true
 # Trailing powerline separators (color→terminal default)
 [custom.git_clean_end]
 command = "true"
-when = "git --no-optional-locks rev-parse --is-inside-work-tree 2>/dev/null | grep -q true && ! git --no-optional-locks status --porcelain 2>/dev/null | grep -q ."
+when = "git --no-optional-locks rev-parse --is-inside-work-tree 2>/dev/null | grep -q true && [ \"$(git --no-optional-locks rev-parse --show-toplevel 2>/dev/null)\" != \"$HOME\" ] && ! git --no-optional-locks status --porcelain 2>/dev/null | grep -q ."
 format = "[\uE0B0]($style)"
 style = "fg:green"
 ignore_timeout = true
 
 [custom.git_dirty_end]
 command = "true"
-when = "git --no-optional-locks rev-parse --is-inside-work-tree 2>/dev/null | grep -q true && git --no-optional-locks status --porcelain 2>/dev/null | grep -q ."
+when = "git --no-optional-locks rev-parse --is-inside-work-tree 2>/dev/null | grep -q true && [ \"$(git --no-optional-locks rev-parse --show-toplevel 2>/dev/null)\" != \"$HOME\" ] && git --no-optional-locks status --porcelain 2>/dev/null | grep -q ."
 format = "[\uE0B0]($style)"
 style = "fg:yellow"
 ignore_timeout = true
@@ -345,3 +358,24 @@ disabled = true
 disabled = true
 [package]
 disabled = true
+
+# ── Enabled lightweight modules ──────────────────────────────────────────────
+# mise: shown only when a project has an active mise runtime (auto-detected by
+# .mise.toml, .tool-versions, etc.). Quiet by default - only renders when used.
+[mise]
+disabled = false
+format = "[ ⇪ $health ]($style)"
+style = "fg:cyan"
+
+# direnv: shown when an .envrc is loaded for the current directory. Useful as
+# a visual confirmation that direnv has applied its env vars.
+[direnv]
+disabled = false
+format = "[ direnv $loaded$allowed]($style) "
+style = "fg:yellow"
+symbol = "📁 "
+allowed_msg = ""
+not_allowed_msg = "[!]"
+denied_msg = "[✗]"
+loaded_msg = ""
+unloaded_msg = "[?]"

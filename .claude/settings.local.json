@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(starship config *)",
+      "Bash(python3 -c \"import tomllib; tomllib.load\\(open\\('files/--XDG_CONFIG_HOME--/starship.toml','rb'\\)\\); print\\('TOML valid'\\)\")",
+      "Bash(STARSHIP_CONFIG=__TRACKED_VAR__/files/--XDG_CONFIG_HOME--/starship.toml timeout 8 starship prompt --status 0 --keymap viins)",
+      "Bash(STARSHIP_CONFIG=__TRACKED_VAR__/files/--XDG_CONFIG_HOME--/starship.toml timeout 8 starship prompt --status 0 --keymap vicmd)",
+      "Bash(STARSHIP_CONFIG=__TRACKED_VAR__/files/--XDG_CONFIG_HOME--/starship.toml starship module character --keymap vicmd)",
+      "Bash(STARSHIP_CONFIG=__TRACKED_VAR__/files/--XDG_CONFIG_HOME--/starship.toml starship module character --keymap viins)",
+      "Bash(STARSHIP_CONFIG=__TRACKED_VAR__/files/--XDG_CONFIG_HOME--/starship.toml starship module character --keymap vivis)",
+      "Bash(osascript -e 'tell application \"AeroSpace\" to quit')",
+      "Bash(pkill -f AeroSpace)",
+      "Bash(brew install *)",
+      "Bash(tmux ls *)",
+      "Read(//Users/jotheeswarangnanasekaran/.tmux/plugins/**)",
+      "Bash(tmux source-file *)",
+      "Bash(tmux show-options *)",
+      "Bash(tmux show-hooks *)",
+      "Bash(~/.tmux/plugins/tmux-continuum/scripts/continuum_save.sh)",
+      "Bash(git -C ~ status --short personal/dev/configs/repositories-si.yml)",
+      "Bash(git -C ~ log --oneline -3 -- personal/dev/configs/)",
+      "Bash(git -C ~ status --short)",
+      "Bash(git --version)",
+      "Bash(mount)",
+      "Bash(kill 12387)",
+      "Bash(kill 12382)",
+      "Bash(git -C ~ config --show-origin --get-all core.fsmonitor)",
+      "Bash(git -C ~ config --show-origin --get-all feature.manyFiles)",
+      "Read(//Users/jotheeswarangnanasekaran/.cache/**)"
+    ]
+  }
+}

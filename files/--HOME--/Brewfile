@@ -25,6 +25,11 @@ is_arm = ::Hardware::CPU.arm?
 # TODO: Hardcoding of the dotfiles repo folder - since that env var is not available inside this env
 setup_login_items_script = "${HOME}/.config/dotfiles/scripts/setup-login-item.sh"
 
+tap 'azure/functions'
+tap 'nikitabobko/tap'
+tap 'sst/tap'
+
+
 # Moving these casks to tbe beginning since they are required in the beginning (for manual login) for a vanilla OS installation
 cask 'font-meslo-lg-nerd-font'
 cask 'keybase',
@@ -68,49 +73,69 @@ cask 'iterm2'
 tap 'xykong/tap'
 
 # formulae pulled in for advanced configs (these are optional, but still recommended)
+
+brew 'awscli'
 brew 'bat'
 brew 'btop'
+brew 'ffmpeg'
+brew 'fzf'
+brew 'gh'
 brew 'git-gui'
 brew 'jaq'
 brew 'mole'
 brew 'moreutils'
 brew 'ncdu'
-brew 'opencode'
+brew 'neovim'
+brew 'ollama'
 brew 'pandoc'
 brew 'prettyping'
 brew 'ripgrep'
 brew 'shfmt'
-brew 'syncthing'
 brew 'tlrc'
+brew 'tmux'
+brew 'yazi'
+brew 'zoxide'
 
+cask '1password'
+cask 'aerospace'
 cask 'aldente', postinstall: "\"#{setup_login_items_script}\" -a 'AlDente'" if ::OS::Mac::version < 26
+cask 'arc'
+cask 'beekeeper-studio'
+cask 'bitwarden'
+cask 'brave-browser'
+cask 'claude-code'
 cask 'clocker', postinstall: "\"#{setup_login_items_script}\" -a 'Clocker'"
-# cask 'codeql'
+cask 'codeql'
+cask 'codex'
+cask 'cursor-cli'
 cask 'dbeaver-community'
 cask 'dockdoor', postinstall: "\"#{setup_login_items_script}\" -a 'Dockdoor'"
 cask 'drawio'
 cask 'firefox@nightly' #, greedy: true
 cask 'flux-markdown', postinstall: 'qlmanage -r'
+cask 'ghostty'
 cask 'google-chrome@beta'
-cask 'thaw', postinstall: "\"#{setup_login_items_script}\" -a 'Thaw'" if ::OS::Mac::version >= 14
+cask 'granola'
+cask 'karabiner-elements', postinstall: "\"${HOME}/.dotfiles/scripts/setup-login-item.sh\" 'Karabiner-Elements'"
 cask 'keepassxc@beta'
 cask 'keycastr', postinstall: "\"#{setup_login_items_script}\" -a 'Keycastr'"
 cask 'keyclu' if is_arm
 cask 'mechvibes', postinstall: "\"#{setup_login_items_script}\" -a 'Mechvibes'"
+cask 'ollama-app', restart_service: :changed
 cask 'onlyoffice'
-cask 'protonvpn'
 cask 'rancher' # if ::OS::Mac::version < 26
-cask 'sol', postinstall: "\"#{setup_login_items_script}\" -a 'Sol'"
+cask 'raycast', postinstall: "\"#{setup_login_items_script}\" -a 'Raycast'"
 cask 'shortcat', postinstall: "\"#{setup_login_items_script}\" -a 'Shortcat'"
+cask 'slack'
+cask 'spotify'
 cask 'stats', postinstall: "\"#{setup_login_items_script}\" -a 'Stats'"
-cask 'zed@preview',
-  postinstall: "ln -sf '/Applications/Zed Preview.app/Contents/MacOS/cli' \"${HOMEBREW_PREFIX}/bin/zed-preview\" && " \
-               "ln -sf \"${HOMEBREW_PREFIX}/bin/zed-preview\" \"${HOMEBREW_PREFIX}/bin/zed\""
+cask 'thaw', postinstall: "\"#{setup_login_items_script}\" -a 'Thaw'" if ::OS::Mac::version >= 14
+cask 'the-unarchiver'
+cask 'todoist-app'
+cask 'visual-studio-code'
+cask 'whatsapp'
+cask 'zed'
 cask 'zen@twilight'
-cask 'zoom'
-
-# brew 'mas'
-# mas 'PDFgear', id: 6469021132
 
 # VSCode extensions
 # Note: Retained as a reference in case of a future switch back to VSCode or VSCodium.
@@ -209,7 +234,7 @@ brew 'sccache'
 # cask 'knockknock'
 # cask 'licecap'
 # cask 'lulu'
-cask 'windows-app'    # replacement for microsoft-remote-desktop
+# cask 'windows-app'    # replacement for microsoft-remote-desktop
 # cask 'microsoft-teams'
 # cask 'monolingual'
 # cask 'netspot'

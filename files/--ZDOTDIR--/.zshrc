@@ -141,6 +141,11 @@ fi
 [[ "${ANTIDOTE_PLUGIN_TXT}" -nt "${ANTIDOTE_PLUGIN_ZSH}" ]] \
   && warn "antidote: '$(yellow "${ANTIDOTE_PLUGIN_TXT}")' is newer than the bundle — run '$(cyan 'update_antidote_and_regenerate_plugin_bundle')' manually to regenerate it."
 
+# Snappier vi-mode: shorten the post-Esc wait from the default 40 (400ms) to 20
+# (200ms). Multi-byte escape sequences (arrow keys, function keys) still parse
+# correctly above ~100ms; lowering further risks misfires.
+export KEYTIMEOUT=20
+
 # Source the pre-generated antidote static bundle.
 # On a vanilla OS (before brew installs antidote) this file is present because
 # it is checked into the home repo. No antidote binary is needed during the
@@ -216,9 +221,9 @@ unset GIT_EDITOR
 # vi (which blocks naturally) works without any special casing.
 local preferred_editors
 if is_non_zero_string "${SSH_CONNECTION:-}"; then
-  preferred_editors=('vi')
+  preferred_editors=('nvim' 'vi')
 else
-  preferred_editors=('zed --wait' 'code --wait' 'vi')
+  preferred_editors=('zed --wait' 'code --wait' 'nvim' 'vi')
 fi
 for editor in "${preferred_editors[@]}"; do
   # ${editor%% *} strips everything after the first space — pure zsh, no fork.
@@ -453,3 +458,23 @@ typeset +x FPATH fpath cdpath CDPATH
 # for profiling zsh, see: https://unix.stackexchange.com/a/329719/27109
 # execute 'ZSH_PROFILE_RC=true zsh' and run 'zprof' to get the details
 [[ -n "${ZSH_PROFILE_RC+1}" ]] && zprof
+
+# Config for yazi
+function y() {
+    local tmp="$(mktemp -t "yazi-cwd.XXXXXX")" cwd
+    yazi "$@" --cwd-file="$tmp"
+    if cwd="$(command cat -- "$tmp")" && [ -n "$cwd" ] && [ "$cwd" != "$PWD" ]; then
+        builtin cd -- "$cwd"
+    fi
+    rm -f -- "$tmp"
+}
+export DYLD_LIBRARY_PATH="/opt/homebrew/opt/expat/lib"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# zoxide — MUST be last. Its init script appends __zoxide_hook to
+# chpwd_functions; any later code that hooks chpwd can shove zoxide's hook
+# out, which triggers the __zoxide_doctor warning the next time you `cd`.
+# ─────────────────────────────────────────────────────────────────────────────
+if command_exists zoxide; then
+  eval "$(zoxide init --cmd cd zsh)"
+fi

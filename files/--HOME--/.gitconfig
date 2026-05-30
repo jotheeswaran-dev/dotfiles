@@ -4,9 +4,6 @@
 # [Windows users] If you are on windows, please search for the word 'windows' - and fix those lines - they seem to cause some trouble
 # [General] Since I use 'delta' as the diffing/pager tool, it's absence on your system will cause some errors. If you are able to, I would sincerely urge you to install and use it for a much better experience. If not, please replace all such occurrences back to use 'diff'
 
-# Note: Even though this will show up twice in `git config -l` - it will still be overridden based on the order of the includeIf lines below (last matching configuration wins). Utility subcommand to find out which config wins: `git who`
-[includeIf "gitdir/i:~/"]
-  path = ~/.gitconfig-oss.inc
 [advice]
   statusHints = true
 [alias]
@@ -382,6 +379,7 @@
   symlinks = false
   untrackedCache = true
   whitespace = fix
+	editor = nvim
 [diff]
   algorithm = histogram
   colorMoved = plain
@@ -528,3 +526,7 @@
   fsckObjects = true
 [user]
   useConfigOnly = true
+# Note: Placed at the END of this file so include values override anything set
+# above (last matching value wins in git config). Utility to verify: `git who`
+[includeIf "gitdir/i:~/"]
+  path = ~/.gitconfig-oss.inc

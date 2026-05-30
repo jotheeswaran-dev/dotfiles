@@ -77,6 +77,11 @@ ohmyzsh/ohmyzsh path:plugins/sudo kind:defer
 # Purely cosmetic; no impact on shell correctness.
 ohmyzsh/ohmyzsh path:plugins/zbell kind:defer
 
+# NOT deferred: runs `bindkey -v` to switch zsh into vi keymap and rebinds
+# common keys (Home/End, backspace, history search) on the viins/vicmd
+# keymaps — must be active from the first keystroke.
+ohmyzsh/ohmyzsh path:plugins/vi-mode
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Third-party plugins (previously cloned into ~/.oh-my-zsh/custom/plugins/)
 #
