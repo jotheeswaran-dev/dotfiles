@@ -173,12 +173,17 @@ using `git for-each-ref`:
 # BAD — discards stashes
 rfc = reflog expire --expire=now --all
 
-# Good — preserves refs/stash
-rfc = "!f() { refs=$(git for-each-ref --format='%(refname)' refs/heads refs/remotes refs/tags); [ -n \"${refs}\" ] && git reflog expire --expire=now --expire-unreachable=now --stale-fix ${refs}; }; f"
+# Good — preserves refs/stash; excludes refs/tags (tags have no reflogs in any
+# repo — git only maintains reflogs for HEAD and branches — passing them always
+# produces "reflog could not be found" errors)
+rfc = "!f() { refs=$(git for-each-ref --format='%(refname)' refs/heads refs/remotes); [ -n \"${refs}\" ] && git reflog expire --expire=now --expire-unreachable=now --stale-fix ${refs}; }; f"
 ```
 
 The same rule applies inside `git cc` — the `reflog expire` step must use
-`git for-each-ref` enumeration, not `--all`.
+`git for-each-ref` enumeration of `refs/heads` and `refs/remotes` only. `refs/tags`
+must be excluded — tags have no reflogs in any repo (git only maintains reflogs for
+`HEAD` and branches), and passing them to `git reflog expire` always produces
+"reflog could not be found" errors for every tag.
 
 ## `.gitattributes`
 

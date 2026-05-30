@@ -17,7 +17,7 @@
 # without needing their own check. This return is a no-op cost (single builtin).
 # ZSH_VERSION guard ensures the zsh-only '(( $+functions[...] ))' syntax is never
 # evaluated by non-zsh runtimes (e.g. direnv's sandbox).
-[[ -n "${ZSH_VERSION-}" ]] && (($+functions[is_shellrc_sourced]))   && return
+[[ -n "${ZSH_VERSION-}" ]] && (($+functions[is_shellrc_sourced])) && return
 
 # Dummy function to check if shellrc is sourced (mirrors is_aliases_sourced in .aliases)
 # Defined immediately after the guard so that any subsequent 'source ~/.shellrc' in zsh
@@ -146,6 +146,7 @@ case "${OSTYPE}" in
 esac
 export ANTIDOTE_ZSH="${HOMEBREW_PREFIX}/opt/antidote/share/antidote/antidote.zsh"
 export ANTIDOTE_PLUGIN_ZSH="${ZDOTDIR}/.zsh_plugins.zsh"
+export ANTIDOTE_PLUGIN_TXT="${ZDOTDIR}/.zsh_plugins.txt"
 
 # --------------------------------------------------------------------------
 # GROUP 1: Bootstrap Utilities
@@ -316,17 +317,24 @@ white()        { _colorize "${WHITE}"        "${1}"; }
 # Send a macOS notification center alert. Safe to call even if osascript is absent.
 # Strips ANSI escape codes from the message before passing to osascript — osascript
 # has no terminal and would display raw escape sequences as literal characters.
-# Usage: notify <message> [title]
-notify() {
+# Named with leading underscore to avoid collision with any system or plugin command
+# named 'notify' (e.g. mise's command_not_found_handler) which would return 127
+# and trigger the ERR trap in cron scripts.
+# Usage: _dotfiles_notify <message> [title]
+_dotfiles_notify() {
   local _msg="${1}"
   local _title="${2:-Dotfiles}"
-  if command_exists osascript; then
+  # Use a hardcoded path check rather than command_exists — osascript is a fixed
+  # macOS system binary at /usr/bin/osascript. A direct -x check is more precise
+  # than command_exists (which also matches functions/aliases) and avoids the overhead
+  # of 4 hash-table lookups for a known-stable system path.
+  if [[ -x '/usr/bin/osascript' ]]; then
     # Strip ANSI escape sequences inline using zsh parameter expansion — no subshell fork.
     # (S) = shortest match; ## = one-or-more (requires extendedglob); replaces all occurrences globally.
     # Pattern: ESC + '[' + zero-or-more digits/semicolons + final letter (e.g. \e[0;31m).
     # local_options scopes extendedglob to this function only — avoids affecting callers.
     # A sed subshell was avoided here because the ERR trap (set in cron scripts) is inherited
-    # into $(...) subshells, and current_timestamp/error are not available inside them.
+    # into $(...) subshells, and shell functions are not available inside them.
     setopt local_options extendedglob
     local _esc=$'\e'
     _msg="${(S)_msg//${_esc}\[[0-9;]##[a-zA-Z]/}"
@@ -339,7 +347,11 @@ success() {
   # direnv during .envrc evaluation and survives strict_env (unlike DIRENV_DIR).
   # Cron, CI, and interactive shells are unaffected.
   # Use error for messages that must always be visible regardless of context.
-  is_non_zero_string "${DIRENV_IN_ENVRC:-}" || echo "✅ $(green '**SUCCESS**') ${1}"
+  # if/else avoids a bare '|| echo' where is_non_zero_string returning 1 could
+  # trigger an ERR trap in callers running under set -e.
+  if ! is_non_zero_string "${DIRENV_IN_ENVRC:-}"; then
+    echo "✅ $(green '**SUCCESS**') ${1}"
+  fi
 }
 
 info() {
@@ -347,14 +359,22 @@ info() {
   # direnv during .envrc evaluation and survives strict_env (unlike DIRENV_DIR).
   # Cron, CI, and interactive shells are unaffected.
   # Use error for messages that must always be visible regardless of context.
-  is_non_zero_string "${DIRENV_IN_ENVRC:-}" || echo "ℹ️ $(cyan '**INFO**') ${1}"
+  # if/else avoids a bare '|| echo' where is_non_zero_string returning 1 could
+  # trigger an ERR trap in callers running under set -e.
+  if ! is_non_zero_string "${DIRENV_IN_ENVRC:-}"; then
+    echo "ℹ️ $(cyan '**INFO**') ${1}"
+  fi
 }
 
 warn() {
   # Suppressed when running inside a direnv subshell. DIRENV_IN_ENVRC=1 is set by
   # direnv during .envrc evaluation and survives strict_env (unlike DIRENV_DIR).
   # Use error for messages that must always be visible regardless of context.
-  is_non_zero_string "${DIRENV_IN_ENVRC:-}" || echo "⚠️ $(light_red '**WARN**') ${1}"
+  # if/else avoids a bare '|| echo' where is_non_zero_string returning 1 could
+  # trigger an ERR trap in callers running under set -e.
+  if ! is_non_zero_string "${DIRENV_IN_ENVRC:-}"; then
+    echo "⚠️ $(light_red '**WARN**') ${1}"
+  fi
 }
 
 debug() {
@@ -362,16 +382,20 @@ debug() {
   # direnv during .envrc evaluation and survives strict_env (unlike DIRENV_DIR).
   # Cron, CI, and interactive shells are unaffected.
   # Use error for messages that must always be visible regardless of context.
-  is_non_zero_string "${DIRENV_IN_ENVRC:-}" || echo "⚙️ $(light_purple '**DEBUG**') ${1}"
+  # if/else avoids a bare '|| echo' where is_non_zero_string returning 1 could
+  # trigger an ERR trap in callers running under set -e.
+  if ! is_non_zero_string "${DIRENV_IN_ENVRC:-}"; then
+    echo "⚙️ $(light_purple '**DEBUG**') ${1}"
+  fi
 }
 
 error() {
   # Inline substitution rather than a color function: the message body is output
-  # as plain text (no color wrapper) and also passed to notify, which receives
+  # as plain text (no color wrapper) and also passed to _dotfiles_notify, which receives
   # a raw string — ANSI codes would appear as literal escape characters there.
   local _msg="${1//${HOME}/~}"
   echo "❌ $(red '**ERROR**') ${_msg} 🤓"
-  notify "${_msg} 🤓" "❌ Error"
+  _dotfiles_notify "${_msg} 🤓" "❌ Error" || true
   return 1
 }
 

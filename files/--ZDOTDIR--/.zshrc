@@ -59,6 +59,11 @@ zstyle ':omz:plugins:iterm2' shell-integration yes
 # correction: activated by lib/correction.zsh when ENABLE_CORRECTION is set
 export ENABLE_CORRECTION='true'
 
+# Ensure XDG_CACHE_HOME exists before any cache writes below.  When delete_caches removes ~/.cache,
+# the subsequent cache-write redirections (>|) silently fail and leave caches empty — breaking fpath
+# updates and other lazy-loaded config that only runs through the cache file.
+ensure_dir_exists "${XDG_CACHE_HOME}"
+
 # Cache brew shellenv to avoid running the brew binary on every shell startup (it's slow due to Ruby startup).
 # The cache is invalidated when the brew binary itself changes (i.e. after brew upgrades).
 # The cache pre-evaluates path_helper so sourcing it is a pure-zsh operation (no subprocesses).
@@ -129,6 +134,13 @@ if command_exists git; then
   }
 fi
 
+# Warn if plugins.txt is newer than the generated bundle — a reminder to run
+# update_antidote_and_regenerate_plugin_bundle. Uses zsh's -nt (newer-than)
+# file test: pure built-in, no subprocess fork. Only fires when the user has
+# edited plugins.txt and not yet regenerated; silent on every normal startup.
+[[ "${ANTIDOTE_PLUGIN_TXT}" -nt "${ANTIDOTE_PLUGIN_ZSH}" ]] \
+  && warn "antidote: '$(yellow "${ANTIDOTE_PLUGIN_TXT}")' is newer than the bundle — run '$(cyan 'update_antidote_and_regenerate_plugin_bundle')' manually to regenerate it."
+
 # Source the pre-generated antidote static bundle.
 # On a vanilla OS (before brew installs antidote) this file is present because
 # it is checked into the home repo. No antidote binary is needed during the
@@ -145,7 +157,7 @@ fi
 }
 
 # Activate mise — the OMZ mise plugin referenced $ZSH_CACHE_DIR (undefined without OMZ)
-# so it has been removed from .zsh_plugins.txt and replaced with a direct activation here.
+# so it has been removed from $ANTIDOTE_PLUGIN_TXT and replaced with a direct activation here.
 #
 # Performance optimisation — cache `mise activate zsh` output to avoid forking the mise
 # binary on every shell start (~5-10ms saving). Same pattern as the starship init cache
@@ -197,23 +209,34 @@ fi
 # You may need to manually set your language environment
 # export LANG=en_US.UTF-8
 
-unset EDITOR
-# Preferred editor for remote sessions
+unset GIT_EDITOR
+# SSH sessions fall back to vi; local sessions prefer GUI editors.
+# EDITOR always delegates to wait-editor, which re-execs $GIT_EDITOR via POSIX
+# word-splitting — so '--wait' flags are passed correctly to GUI editors, and
+# vi (which blocks naturally) works without any special casing.
+local preferred_editors
 if is_non_zero_string "${SSH_CONNECTION:-}"; then
-  export EDITOR='vi'
+  preferred_editors=('vi')
 else
-  # Preferred editor for local sessions
-  local preferred_editors=('zed --wait' 'code --wait' 'vi')
-  for editor in "${preferred_editors[@]}"; do
-    # ${editor%% *} strips everything after the first space — pure zsh, no fork.
-    # Equivalent to extract_first_word but avoids a subshell invocation.
-    if command_exists "${editor%% *}"; then
-      export EDITOR="${editor}"
-      break
-    fi
-  done
-  unset preferred_editors
+  preferred_editors=('zed --wait' 'code --wait' 'vi')
 fi
+for editor in "${preferred_editors[@]}"; do
+  # ${editor%% *} strips everything after the first space — pure zsh, no fork.
+  if command_exists "${editor%% *}"; then
+    export GIT_EDITOR="${editor}"
+    break
+  fi
+done
+unset preferred_editors editor
+# Safety net: if no editor was found in PATH (e.g. a stripped environment
+# where even vi is absent), fall back to vi unconditionally so GIT_EDITOR is
+# never left unset. wait-editor will fail clearly if vi is truly missing.
+if is_zero_string "${GIT_EDITOR:-}"; then
+  export GIT_EDITOR='vi'
+fi
+# EDITOR is always the wait-editor wrapper regardless of which editor was
+# selected — set once here rather than repeating it in every branch above.
+export EDITOR='wait-editor'
 
 # For a full list of active aliases, run `alias`.
 

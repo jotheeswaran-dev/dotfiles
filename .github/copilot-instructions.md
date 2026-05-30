@@ -359,7 +359,7 @@ with Ruby 2.6. Do NOT use homebrew-managed Ruby for `$DOTFILES_DIR` scripts.
 - The trailing `-` sets `$0`; user args start at `$1`. Never use `$0` for user args.
 - For multi-step logic, use `!f()` named function pattern: `"!f() { ...; }; f"`.
 - `git sci`: smart commit, **non-interactive** — takes a message arg; amends (`git amq`) if ahead of remote and not diverged, otherwise creates a new commit (`git ci`). Aborts if nothing staged. Use `git diff --cached --quiet` (not locale-dependent `grep "to unstage"`).
-- `git cc` / `git rfc`: **never use `--all`** in `reflog expire` — it discards stashes. Always enumerate refs explicitly with `git for-each-ref refs/heads refs/remotes refs/tags`.
+- `git cc` / `git rfc`: **never use `--all`** in `reflog expire` — it discards stashes. Always enumerate refs explicitly with `git for-each-ref refs/heads refs/remotes` only. `refs/tags` must be excluded — tags have no reflogs in any repo (git only maintains reflogs for `HEAD` and branches), and passing them to `git reflog expire` always produces "reflog could not be found" errors for every tag.
 - `fetch.fsckObjects = false` enforced in antidote bundle repo git configs
   (ohmyzsh, fast-syntax-highlighting) — `fetch` only, not `receive`/`transfer`.
 

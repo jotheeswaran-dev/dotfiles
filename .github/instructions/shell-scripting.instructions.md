@@ -440,24 +440,27 @@ my_cmd() { dispatch_or_fallback my_cmd _my_cmd "$@"; }
 
 # Run only when executed directly, not when sourced (e.g. to import the function
 # into another script).
-[[ "${zsh_eval_context}" == *:file* ]] || my_cmd "$@"
+[[ "${zsh_eval_context}" == *file* ]] || my_cmd "$@"
 # ZSH_VERSION guard ensures the zsh-only '(( $+functions[...] ))' syntax is never
 # evaluated by non-zsh runtimes (e.g. direnv's sandbox).
-[[ -n "${ZSH_VERSION-}" ]] && (($+functions[compdef])) && compdef my_cmd
+[[ -n "${ZSH_VERSION-}" ]] && (($+functions[compdef])) && compdef my_cmd || true
 ```
 
 ### `zsh_eval_context` Self-Invocation Guard
 
-`[[ "${zsh_eval_context}" == *:file* ]] || my_cmd "$@"` prevents the function
-from running when the file is `source`d by another autoload script (e.g.
-`status_all_repos` sources `st` to import its function). When `*:file*` is
+`[[ "${zsh_eval_context}" == *file* ]] || my_cmd "$@"` prevents the function
+from running when the file is `source`d by another script. When `*file*` is
 present in `zsh_eval_context`, the file is being sourced — skip execution.
 When absent, the file is being run directly — execute.
+
+Use `*file*` (not `*:file*`) — the separator before `file` differs by context:
+- Sourced from a script: `toplevel:shfunc:file` → colon-separated, matches both
+- Sourced in `zsh -c`: `cmdarg file` → space-separated, only `*file*` matches
 
 ### `compdef` Registration Guard
 
 ```zsh
-[[ -n "${ZSH_VERSION-}" ]] && (($+functions[compdef])) && compdef my_cmd
+[[ -n "${ZSH_VERSION-}" ]] && (($+functions[compdef])) && compdef my_cmd || true
 ```
 
 Two guards are required:
@@ -468,6 +471,11 @@ Two guards are required:
    after `compinit` has run. Autoload scripts may be sourced before `compinit`
    (e.g. during `fresh-install`), so this guard prevents a "command not found"
    error.
+
+The trailing `|| true` is required because `(($+functions[compdef]))` exits 1
+when `compdef` is not defined (arithmetic 0 = false = exit 1 in zsh). Without
+`|| true`, sourcing an autoload script from a script that has an ERR trap (e.g.
+a cron job) would fire the trap every time `compdef` is not available.
 
 ## `exec`-Wrapper Scripts
 

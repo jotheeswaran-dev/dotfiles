@@ -24,7 +24,7 @@ _push() {
 push() { dispatch_or_fallback push _push "$@"; }
 
 # Run only when executed directly, not when sourced (e.g. to import the function into another script).
-[[ "${zsh_eval_context}" == *:file* ]] || push "$@"
+[[ "${zsh_eval_context}" == *file* ]] || push "$@"
 # ZSH_VERSION guard ensures the zsh-only '(( $+functions[...] ))' syntax is never
 # evaluated by non-zsh runtimes (e.g. direnv's sandbox).
-[[ -n "${ZSH_VERSION-}" ]] && (($+functions[compdef])) && compdef push
+[[ -n "${ZSH_VERSION-}" ]] && (($+functions[compdef])) && compdef push || true

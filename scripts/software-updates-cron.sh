@@ -10,14 +10,8 @@
 
 _SCRIPT_NAME="${0:t}"
 
+# Re-source guard is inside .aliases itself — safe to call unconditionally.
 source "${HOME}/.aliases"
-# This script is invoked from cron, which starts a minimal bash environment.
-# load_zsh_configs must be called explicitly to bring all zsh configs into scope.
-load_zsh_configs
-
-# error() (from .shellrc) calls notify() which triggers an osascript notification — use it directly
-# for the ERR trap so we don't need a separate helper.
-trap 'current_timestamp _trap_time; error "Software updates failed at ${_trap_time}. Check ~/software-updates-cron.log for details."' ERR
 
 # Run a single update step if the check command is available
 _perform_update() {
@@ -40,6 +34,14 @@ _perform_update() {
 }
 
 main() {
+  # LOCAL_TRAPS scopes the ERR trap to main() only — it is not inherited into called
+  # functions. Without this, non-zero exits inside called functions (e.g. git sci
+  # finding nothing to commit, st warning about a missing repo) fire the trap even
+  # when the call site has '|| warn' or '|| true'.
+  setopt LOCAL_TRAPS
+  # error() calls _dotfiles_notify() which triggers an osascript notification.
+  trap 'current_timestamp _trap_time; error "Software updates failed at ${_trap_time}. Check ~/software-updates-cron.log for details."' ERR
+
   # Capture start epoch into both a local variable and SCRIPT_START_TIMES.
   # The local is passed explicitly to print_script_duration at the end of main.
   # SCRIPT_START_TIMES is used by step_end (called throughout this script via
@@ -49,7 +51,7 @@ main() {
   local script_start_time
   script_start_time="${EPOCHSECONDS}"
   SCRIPT_START_TIMES+=("${script_start_time}")
-  local tracked_file f folder
+  local tracked_file f folder outdated_flat=''
   print_script_start
 
   # brew doctor # Removed for cron job efficiency
@@ -63,13 +65,26 @@ main() {
   # 'ignore-io' updates the data from http://gitignore.io so that we can generate the '.gitignore' file contents from the cmd-line
   _perform_update 'git-ignore database' 'git-ignore-io' 'git ignore-io --update-list'
 
+  _perform_update 'claude-code' 'claude' 'claude update'
+
   # Update antidote plugins and regenerate the static bundle
   step_start
   section_header "$(yellow 'Updating') $(purple 'antidote plugins') and regenerating plugin bundle"
   update_antidote_and_regenerate_plugin_bundle
   step_end
 
-  _perform_update 'claude-code' 'claude' 'claude update'
+  # Update bat cache
+  if command_exists bat; then
+    step_start
+    section_header "$(yellow 'Updating') $(purple 'bat') cache"
+    local bat_syntax_dir
+    bat_syntax_dir="$(bat --config-dir)/syntaxes"
+    ensure_dir_exists "${bat_syntax_dir}"
+    curl --retry 3 --retry-delay 5 -fsSL https://raw.githubusercontent.com/mattmc3/antidote/main/misc/zsh_plugins.sublime-syntax -o "${bat_syntax_dir}/zsh_plugins.sublime-syntax"
+    bat cache --build
+    step_end
+    unset bat_syntax_dir
+  fi
 
   # Commenting out since I have started using rapidfox user.js settings
   # local firefox_profiles="${PERSONAL_PROFILES_DIR}/FirefoxProfile/Profiles/DefaultProfile"
@@ -112,8 +127,8 @@ main() {
   if is_git_repo "${zen_browser_desktop_codebase}"; then
     step_start
     section_header "$(yellow "Remove 'twilight' tag from") $(purple 'zen-browser-desktop') repo"
-    # Only delete the stale tag here (no rebase); upreb-zen-browser-desktop.sh
-    # mirrors this logic and additionally runs _upreb when called interactively.
+    # Only delete the stale tag here (no rebase; upreb is handled in the subsequent blocks)
+    # upreb-zen-browser-desktop.sh mirrors this logic and additionally runs _upreb when called interactively.
     if git -C "${zen_browser_desktop_codebase}" rev-parse -q --verify refs/tags/twilight &>/dev/null; then
       git -C "${zen_browser_desktop_codebase}" delete-tag twilight && success "Deleted 'twilight' tag."
     fi
@@ -122,20 +137,54 @@ main() {
 
   success 'Finished independent updates.'
 
+  if command_exists run-all.sh; then
+    step_start
+    section_header "$(yellow 'Update repos in home folder')"
+    # Aliases ('home', 'rug') are not expanded in non-interactive shells (e.g. cron).
+    # Use the equivalent direct invocation instead of the 'home pull' alias.
+    FOLDER="${HOME}" FILTER='.bin|.dotfiles|zsh|mise' MAXDEPTH=5 run-all.sh git pull || warn 'Failed to pull home repos'
+    step_end
+
+    sleep 10  # so that GH doesn't throttle when we call a lot of times within a short time
+
+    step_start
+    section_header "$(yellow 'Upreb repos in oss folder')"
+    # Aliases ('oss', 'rug') are not expanded in non-interactive shells (e.g. cron).
+    # Use the equivalent direct invocation instead of the 'oss upreb' alias.
+    FOLDER="${PROJECTS_BASE_DIR}/oss" MAXDEPTH=4 run-all.sh git upreb && success 'Finished upreb for oss repos' || warn 'Failed to upreb oss repos'
+    step_end
+
+    step_start
+    section_header "$(yellow 'Restoring mtime and registering for maintenance operations')"
+    # Aliases ('all', 'rug') are not expanded in non-interactive shells (e.g. cron).
+    # Use the equivalent direct invocation instead of the 'all' alias.
+    FOLDER='/Users/vijay' MAXDEPTH=7 run-all.sh git restore-mtime -c
+    FOLDER='/Users/vijay' MAXDEPTH=7 run-all.sh git maintenance register --config-file "${HOME}/.gitconfig-oss.inc"
+    FOLDER='/Users/vijay' MAXDEPTH=7 run-all.sh git maintenance start
+    step_end
+  fi
+
+  # Collect repo ancestor dirs once and share across both post-clone operations
+  # to avoid running the expensive find traversal twice.
+  local -a all_dirs
+  _collect_repo_ancestor_dirs
+  _SHARED_REPO_DIRS=("${all_dirs[@]}")
+
   step_start
-  section_header "$(yellow 'Update repos in home folder')"
-  # Aliases ('home', 'rug') are not expanded in non-interactive shells (e.g. cron).
-  # Use the equivalent direct invocation instead of the 'home pull' alias.
-  FOLDER="${HOME}" FILTER='.bin|.dotfiles|zsh|mise' MAXDEPTH=5 run-all.sh git pull || warn 'Failed to pull home repos'
+  section_header "$(yellow 'Allow all direnv configs')"
+  allow_all_direnv_configs
   step_end
 
-  sleep 10  # so that GH doesn't throttle when we call a lot of times within a short time
+  step_start
+  section_header "$(yellow 'Install languages using mise')"
+  install_mise_versions
+  step_end
+
+  unset _SHARED_REPO_DIRS
 
   step_start
-  section_header "$(yellow 'Upreb repos in oss folder')"
-  # Aliases ('oss', 'rug') are not expanded in non-interactive shells (e.g. cron).
-  # Use the equivalent direct invocation instead of the 'oss upreb' alias.
-  FOLDER="${PROJECTS_BASE_DIR}/oss" MAXDEPTH=4 run-all.sh git upreb && success 'Finished upreb for oss repos' || warn 'Failed to upreb oss repos'
+  section_header "$(yellow 'Regenerate repo aliases')"
+  regenerate_repo_aliases
   step_end
 
   step_start
@@ -196,20 +245,22 @@ main() {
 
   step_start
   section_header "$(yellow 'Update home and profiles repos')"
-  # update_all_repos is defined in a standalone zsh script (not in .shellrc/.aliases);
-  # source it directly so the function and its helpers are available in this shell.
-  # Note: load_file_if_exists is intentionally NOT used here — these files are required,
-  # not optional; a missing file should fail loudly rather than silently no-op.
-  source "${XDG_CONFIG_HOME}/zsh/update_all_repos" && success 'Finished updating home and profiles repos' || warn 'Failed to update home and profiles repos'
+  # source imports the function definition into this shell. The explicit call on
+  # the next line is still required because the autoload script's zsh_eval_context
+  # guard ('*:file*' match) suppresses auto-execution when sourced — it only
+  # runs automatically when the file is invoked directly, not when sourced.
+  source "${XDG_CONFIG_HOME}/zsh/update_all_repos"
+  update_all_repos && success 'Finished updating home and profiles repos' || warn 'Failed to update home and profiles repos'
   step_end
 
   step_start
   section_header "$(yellow 'Report status of all repos')"
-  # status_all_repos is defined in a standalone zsh script (not in .shellrc/.aliases);
-  # source it directly so the function and its helpers are available in this shell.
-  # Note: load_file_if_exists is intentionally NOT used here — these files are required,
-  # not optional; a missing file should fail loudly rather than silently no-op.
+  # source imports the function definition into this shell. The explicit call on
+  # the next line is still required because the autoload script's zsh_eval_context
+  # guard ('*:file*' match) suppresses auto-execution when sourced — it only
+  # runs automatically when the file is invoked directly, not when sourced.
   source "${XDG_CONFIG_HOME}/zsh/status_all_repos"
+  status_all_repos || true
   step_end
 
   step_start
@@ -244,9 +295,9 @@ main() {
     # notification. Instead, warn to the terminal and notify explicitly with the plain-text list.
     if is_non_zero_string "${outdated}"; then
       warn "Found some outdated softwares that need manual updating: $(yellow "${outdated}")"
-      # Replace newlines with ', ' — osascript display notification cannot span multiple lines.
-      local outdated_flat="${outdated//$'\n'/, }"
-      notify "Found some outdated softwares that need manual updating: ${outdated_flat}" "⚠️ Outdated Software"
+      # Replace newlines with ', ' — osascript notification cannot span multiple lines.
+      # Stored in main-scoped outdated_flat so the final summary notification can include it.
+      outdated_flat="${outdated//$'\n'/, }"
     fi
   else
     debug 'skipping updating brews & casks'
@@ -260,7 +311,13 @@ main() {
   format_duration "${_duration}" _duration_human
 
   success "Finished software updates at $(purple "${_now}") in $(light_blue "${_duration_human}")"
-  notify "All updates finished at ${_now} (took ${_duration_human})." "✅ Software Updates Done"
+  # Include outdated packages in the final notification if any were found, so the
+  # notification is not immediately replaced by a subsequent one before it is seen.
+  if is_non_zero_string "${outdated_flat}"; then
+    _dotfiles_notify "Done (${_duration_human}). Needs manual update: ${outdated_flat}" "⚠️ Software Updates" || true
+  else
+    _dotfiles_notify "All updates finished at ${_now} (took ${_duration_human})." "✅ Software Updates Done" || true
+  fi
   print_script_duration "${script_start_time}"
 }
 

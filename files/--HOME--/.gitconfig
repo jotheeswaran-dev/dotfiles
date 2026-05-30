@@ -262,7 +262,7 @@
   # --stale-fix prunes broken reflog entries pointing to missing objects.
   # Note: refs/stash is intentionally excluded to preserve stashes.
   # Usage: git rfc
-  rfc = "!f() { refs=$(git for-each-ref --format='%(refname)' refs/heads refs/remotes refs/tags); [ -n \"${refs}\" ] && git reflog expire --expire=now --expire-unreachable=now --stale-fix ${refs}; }; f"
+  rfc = "!f() { refs=$(git for-each-ref --format='%(refname)' refs/heads refs/remotes); [ -n \"${refs}\" ] && git reflog expire --expire=now --expire-unreachable=now --stale-fix ${refs}; }; f"
 
   # Prints the disk size of the current repo's .git directory.
   # Usage: git size
@@ -279,7 +279,7 @@
   # Example: SKIP_SIZE_BEFORE=1 git cc
   # Example: git cc --expire=now          (expire entire reflog immediately)
   # Example: git cc --expire=3.days.ago   (expire entries older than 3 days)
-  cc = "!f() { expire=''; rest=(); for a in \"$@\"; do case \"${a}\" in --expire=*) expire=\"${a#--expire=}\" ;; *) rest+=(\"${a}\") ;; esac; done; [ -n \"${expire}\" ] || expire=1.week.ago; refs=$(git for-each-ref --format='%(refname)' refs/heads refs/remotes refs/tags); [ -n \"${SKIP_SIZE_BEFORE}\" ] || git size; git remote prune origin; git pack-refs --all; git repack -a -d --depth=250 --window=250; [ -n \"${refs}\" ] && git reflog expire --expire=\"${expire}\" --expire-unreachable=\"${expire}\" --stale-fix \"${rest[@]}\" ${refs}; git maintenance run --task=gc; git size; }; f"
+  cc = "!f() { expire=''; rest=(); for a in \"$@\"; do case \"${a}\" in --expire=*) expire=\"${a#--expire=}\" ;; *) rest+=(\"${a}\") ;; esac; done; [ -n \"${expire}\" ] || expire=1.week.ago; refs=$(git for-each-ref --format='%(refname)' refs/heads refs/remotes); [ -n \"${SKIP_SIZE_BEFORE}\" ] || git size; git remote prune origin; git pack-refs --all; git repack -a -d --depth=250 --window=250; [ -n \"${refs}\" ] && git reflog expire --expire=\"${expire}\" --expire-unreachable=\"${expire}\" --stale-fix \"${rest[@]}\" ${refs}; git maintenance run --task=gc; git size; }; f"
 
   # Lists the 100 biggest objects ever stored in the repo (including deleted files).
   # Usage: git big

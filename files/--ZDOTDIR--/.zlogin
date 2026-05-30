@@ -98,20 +98,21 @@ autoload -Uz zrecompile
 
 # zsh config files can be compiled to improve performance
 # Based from: https://github.com/romkatv/zsh-bench/blob/master/configs/ohmyzsh%2B/setup
+# Core startup files — grouped together regardless of whether they live in
+# ZDOTDIR or HOME; all are sourced on every shell start and benefit equally
+# from bytecode compilation.
 recompile_zsh_scripts "${ZDOTDIR}/.zshenv"
 recompile_zsh_scripts "${ZDOTDIR}/.zshrc"
 recompile_zsh_scripts "${ZDOTDIR}/.zlogin"
+recompile_zsh_scripts "${HOME}/.shellrc"
+recompile_zsh_scripts "${HOME}/.aliases"
+
 # The antidote static bundle lives in ZDOTDIR (not ANTIDOTE_HOME or XDG_CACHE_HOME),
 # so it is not picked up by any of the find_in_folder_and_recompile scans below.
 # Compile it explicitly so every shell startup sources bytecode, not raw zsh text.
 recompile_zsh_scripts "${ANTIDOTE_PLUGIN_ZSH}"
 
 find_in_folder_and_recompile "${ANTIDOTE_HOME}"
-
-# These files live in HOME (not ZDOTDIR), so they are not covered by the
-# find_in_folder_and_recompile scans above and must be compiled explicitly.
-recompile_zsh_scripts "${HOME}/.aliases"
-recompile_zsh_scripts "${HOME}/.shellrc"
 
 # Compile third-party completion scripts that are sourced directly at startup.
 # Without a .zwc these are parsed from source on every shell start.

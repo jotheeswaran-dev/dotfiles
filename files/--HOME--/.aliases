@@ -234,7 +234,8 @@ delete_caches() {
   # files (brew-shellenv-cache.zsh, starship-init-cache.zsh, repo-aliases-cache.zsh, zsh
   # completion dump, fast-syntax-highlighting theme cache, etc.) and their *.zwc
   # bytecode companions. They are all regenerated automatically on the next shell
-  # start or login shell.
+  # start or login shell.  .zshrc recreates XDG_CACHE_HOME with mkdir -p before
+  # any cache write, so the missing directory is safe.
   is_directory "${XDG_CACHE_HOME}" && rm -rfv "${XDG_CACHE_HOME}"
 }
 
@@ -502,10 +503,9 @@ if is_macos && command_exists brew; then
   # bundle clone, then rewrites ANTIDOTE_PLUGIN_ZSH from the plugins.txt manifest.
   # Called by post-brew-install.sh after every 'bupc' run and by software-updates-cron.sh.
   update_antidote_and_regenerate_plugin_bundle() {
-    local plugins_txt="${ZDOTDIR}/.zsh_plugins.txt"
-    if is_non_empty_file "${ANTIDOTE_ZSH}" && is_non_empty_file "${plugins_txt}"; then
+    if is_non_empty_file "${ANTIDOTE_ZSH}" && is_non_empty_file "${ANTIDOTE_PLUGIN_TXT}"; then
       if ! is_directory_empty "${ANTIDOTE_HOME}"; then
-        # Run antidote update in a clean zsh subshell — no .zshrc, no extended_glob,
+        # Run antidote command in a clean zsh subshell — no .zshrc, no extended_glob,
         # no color variables. This prevents ANSI escape sequences from being
         # misinterpreted as glob patterns inside antidote's internal eval calls.
         zsh -f -c 'source "$1"; antidote update' -- "${ANTIDOTE_ZSH}"
@@ -522,12 +522,14 @@ if is_macos && command_exists brew; then
             warn "Could not unshallow '$(yellow "${bundle_dir}")' — will retry on next update"
         done
       fi
-      # Run antidote bundle in a clean subshell for the same reason.
-      zsh -f -c 'source "$1"; antidote bundle <"$2"' -- "${ANTIDOTE_ZSH}" "${plugins_txt}" >"${ANTIDOTE_PLUGIN_ZSH}" &&
+      # Run antidote command in a clean zsh subshell — no .zshrc, no extended_glob,
+      # no color variables. This prevents ANSI escape sequences from being
+      # misinterpreted as glob patterns inside antidote's internal eval calls.
+      zsh -f -c 'source "$1"; antidote bundle <"$2"' -- "${ANTIDOTE_ZSH}" "${ANTIDOTE_PLUGIN_TXT}" >"${ANTIDOTE_PLUGIN_ZSH}" &&
         success "antidote bundle regenerated at '$(yellow "${ANTIDOTE_PLUGIN_ZSH}")'" ||
         warn 'Failed to regenerate antidote bundle'
     else
-      warn "Skipping antidote bundle regeneration: antidote not found at '$(yellow "${ANTIDOTE_ZSH}")' or '$(yellow "${plugins_txt}")' is missing"
+      warn "Skipping antidote bundle regeneration: antidote not found at '$(yellow "${ANTIDOTE_ZSH}")' or '$(yellow "${ANTIDOTE_PLUGIN_TXT}")' is missing"
     fi
   }
 
@@ -655,15 +657,21 @@ if command_exists tmux; then
 fi
 
 # Editor aliases
-if command_exists "${EDITOR%% *}"; then
+# EDITOR='wait-editor' — a wrapper script that re-execs $GIT_EDITOR with word-splitting
+# so --wait is passed correctly to tools that exec() EDITOR directly (crontab, visudo, etc.).
+# GIT_EDITOR carries the full invocation with flags (e.g. 'zed --wait').
+if command_exists "${EDITOR:-}"; then
   if is_zsh; then
     # associate file extensions with applications for the 'open' command
     alias -s txt="${EDITOR}"
     alias -s log="${EDITOR}"
   fi
 
-  # add a generic alias for editing files and folders
-  alias edit="${EDITOR%% *}"
+  # add a generic alias for editing files and folders — non-blocking (bare binary,
+  # no --wait) so the shell prompt returns immediately after launching the editor.
+  # Non-blocking: strip flags (e.g. 'zed --wait' → 'zed') via nested expansion.
+  # Falls back to $EDITOR then 'vi' if GIT_EDITOR is unset (e.g. non-interactive shells).
+  alias edit="${${GIT_EDITOR:-${EDITOR:-vi}}%% *}"
 
   # opens the relevant files and folders (used for laptop provisioning) in a single VSCode session
   alias edit-gist='edit "${DOTFILES_DIR}" "${PERSONAL_BIN_DIR}" "${PERSONAL_CONFIGS_DIR}" "${HOME}"/.gitconfig-* "${HOME}/.gitignore" "${SSH_CONFIGS_DIR}" "${HOME}/.mise.toml" "${PERSONAL_PROFILES_DIR}/.gitignore"'
@@ -699,9 +707,16 @@ _create_crontab() {
   echo "SHELL=\"${SHELL}\"" >>"${file}"
   echo "USERNAME=\"${USERNAME}\"" >>"${file}"
   echo "HOME=\"${HOME}\"" >>"${file}"
-  echo "PATH=${HOMEBREW_PREFIX}/bin:/usr/bin:/bin  # Needed for chronic to be in the PATH" >>"${file}"
+  # NOTE: do NOT add inline comments on the PATH line — crontab treats '#' as part of the value,
+  # corrupting the last directory entry and causing "command not found" for scripts in that dir.
+  echo "# PATH: homebrew + system utils + personal bin + dotfiles scripts (needed for chronic, run-all.sh, capture-prefs.sh etc.)" >>"${file}"
+  echo "PATH=${HOMEBREW_PREFIX}/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PERSONAL_BIN_DIR}:${DOTFILES_DIR}/scripts" >>"${file}"
   echo >>"${file}"
-  echo "0   *   *   *   *   chronic zsh -lsc \"${DOTFILES_DIR}/scripts/software-updates-cron.sh | tee -a ${HOME}/software-updates-cron.log\"" >>"${file}"
+  # Run script in its own fresh zsh process; wrap with zsh -c so tee is inside
+  # chronic's scope (chronic must see both the script and tee together to suppress
+  # output on success). The inner zsh sources .aliases fresh — no stale function
+  # inheritance from any parent shell.
+  echo "0   *   *   *   *   chronic ${HOMEBREW_PREFIX}/bin/zsh -c '${HOMEBREW_PREFIX}/bin/zsh ${DOTFILES_DIR}/scripts/software-updates-cron.sh 2>&1 | tee -a ${HOME}/software-updates-cron.log'" >>"${file}"
 }
 
 # Loads the system crontab from ${PERSONAL_CONFIGS_DIR}/crontab.txt.

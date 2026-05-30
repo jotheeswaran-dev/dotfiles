@@ -28,7 +28,7 @@ status_all_repos() {
 }
 
 # Run only when executed directly, not when sourced (e.g. to import the function into another script).
-[[ "${zsh_eval_context}" == *:file* ]] || status_all_repos "$@"
+[[ "${zsh_eval_context}" == *file* ]] || status_all_repos "$@"
 # ZSH_VERSION guard ensures the zsh-only '(( $+functions[...] ))' syntax is never
 # evaluated by non-zsh runtimes (e.g. direnv's sandbox).
-[[ -n "${ZSH_VERSION-}" ]] && (($+functions[compdef])) && compdef status_all_repos
+[[ -n "${ZSH_VERSION-}" ]] && (($+functions[compdef])) && compdef status_all_repos || true
