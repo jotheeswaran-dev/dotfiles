@@ -13,7 +13,7 @@ idiomatic_version_file_enable_tools = [
   "python",
   "ruby",
   "rust",
-  "scala"
+  "scala",
 ]
 experimental = true
 fetch_remote_versions_timeout = "30s"
@@ -23,3 +23,11 @@ compile = false
 
 [settings.python]
 github_attestations = false
+
+[tools]
+claude = "latest"
+dotnet = "10"
+node = "26.2.0"
+python = "3.14"
+tflint = "latest"
+yarn = "latest"

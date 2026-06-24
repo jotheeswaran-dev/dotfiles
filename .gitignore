@@ -6,3 +6,9 @@
 
 # Session-specific work products (transactional, no long-term value)
 /.ai/session-state/
+
+# Claude Code machine-local settings
+/.claude/settings.local.json
+
+# tmux plugins are cloned at runtime by tpm — never tracked
+files/--HOME--/.config/tmux/plugins/

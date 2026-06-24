@@ -1298,3 +1298,5 @@ zsdoc/data
 !.*keep
 !/personal/**/bin/
 !/personal/**/*.tgz
+
+**/.claude/settings.local.json

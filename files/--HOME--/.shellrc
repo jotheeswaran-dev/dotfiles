@@ -58,10 +58,10 @@ typeset -A _INDENT_CACHE
 
 # ------------ Customizable env vars (MUST BE CHANGED to your values) ------------
 # The github username where the setup scripts are downloaded from
-export GH_USERNAME='vraravam'
+export GH_USERNAME='jotheeswaran-dev'
 
 # Keybase username (comment out if you don't use Keybase)
-export KEYBASE_USERNAME='avijayr'
+export KEYBASE_USERNAME='jotheeswarandev'
 # --------------------------------------------------------------------------------
 
 # ---------- Env vars for basic/common setup (can be optionally changed) ---------
@@ -89,6 +89,7 @@ export KEYBASE_HOME_REPO_NAME='home'
 
 # Keybase profiles repo name (comment out if you don't use Keybase)
 export KEYBASE_PROFILES_REPO_NAME='profiles'
+
 # --------------------------------------------------------------------------------
 
 # ------------- Env vars for upstream setup (SHOULD NOT be changed) --------------

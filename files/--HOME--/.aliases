@@ -1049,3 +1049,62 @@ resume_softwareupdate_schedule() {
 reload_macos_prefs() {
   _call_ruby_macos 'reload_macos_prefs'
 }
+
+# ============================================================================
+# Personal customizations (layered on top of upstream's .aliases)
+# ============================================================================
+
+# Switches the ghostty font between presets, in place. Usage: gfont [meslo|jbm|maple]
+gfont() {
+  local choice="${1:-}"
+  local cfg="${XDG_CONFIG_HOME:-${HOME}/.config}/ghostty/config"
+  local family style size
+  case "${choice}" in
+    meslo)
+      family='MesloLGS Nerd Font'
+      style='Regular'
+      size=13
+      ;;
+    jbm|jetbrains)
+      family='JetBrainsMonoNL Nerd Font Mono'
+      style='Medium'
+      size=13
+      ;;
+    maple)
+      family='Maple Mono NF'
+      style='Medium'
+      size=13
+      ;;
+    *)
+      printf 'Usage: gfont [meslo|jbm|maple]\n'
+      printf '  current settings:\n'
+      \grep -hE '^font-(family|style|size)' "${cfg}" 2>/dev/null | sed 's/^/    /'
+      printf '\nSample to judge readability after switching:\n'
+      printf '  abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789\n'
+      printf '  il1 | oO0 | g9 | mn  --  ambiguous-char check\n'
+      printf '  == != => -> >= <= && ||  --  code ligatures\n'
+      printf '      ⇪  --  Nerd Font glyphs\n'
+      return 1
+      ;;
+  esac
+  # Rewrite the three font-related lines, in place. macOS sed needs the empty -i arg.
+  sed -i '' -E \
+    -e "s|^font-family = .*|font-family = ${family}|" \
+    -e "s|^font-style = .*|font-style = ${style}|" \
+    -e "s|^font-size = .*|font-size = ${size}|" \
+    "${cfg}"
+  printf 'Set ghostty font: %s (%s, %spt)\n' "${family}" "${style}" "${size}"
+  printf 'Press Cmd+Shift+, in the ghostty window to reload.\n'
+}
+
+if command_exists fzf; then
+  alias vf='selected=$(fzf --preview="bat --color=always --style=plain {}" --bind K:preview-up,J:preview-down,esc:abort --prompt "Please select a file to edit: ") && [ -n "$selected" ] && vim "$selected"'
+  alias fhe="eval \$(history | fzf --tac | sed 's/ *[0-9]* *//')"
+  alias fhc="history | fzf --tac | sed 's/ *[0-9]* *//' | pbcopy"
+
+  if command_exists gh; then
+    ghpr() {
+      GH_FORCE_TTY=100% gh pr list | fzf --ansi --preview 'GH_FORCE_TTY=100% gh pr view {1}' --preview-window down --header-lines 3 | awk '{print $1}' | xargs gh pr checkout
+    }
+  fi
+fi

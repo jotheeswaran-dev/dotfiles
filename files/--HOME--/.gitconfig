@@ -5,6 +5,12 @@
 # [General] Since I use 'delta' as the diffing/pager tool, it's absence on your system will cause some errors. If you are able to, I would sincerely urge you to install and use it for a much better experience. If not, please replace all such occurrences back to use 'diff'
 
 # Note: Even though configs from this file will show up twice in `git config -l` - it will still be overridden based on the order of the includeIf lines below (last matching configuration wins). Utility subcommand to find out which config wins: `git who`
+
+# Global default SSH command. Set BEFORE the includes so per-folder includeIf overrides
+# (e.g. ~/.gitconfig-si.inc pinning the SI key) take precedence for matching repos.
+[core]
+  sshCommand = "ssh -o ConnectTimeout=20"
+
 [include]
   path = ~/.gitconfig-oss.inc
   # Delta-specific configuration
@@ -592,7 +598,7 @@
   longPaths = true
   # pager setting moved to ~/.gitconfig-delta.inc (conditionally included when delta is installed)
   # repositoryFormatVersion = 1   # Note: This can be uncommented to enable the new repository format for SHA256 support
-  sshCommand="ssh -o ConnectTimeout=20"
+  # sshCommand moved ABOVE the [include] block so per-folder includes (e.g. SI's key) can override it
   symlinks = false
   untrackedCache = true
   whitespace = fix
