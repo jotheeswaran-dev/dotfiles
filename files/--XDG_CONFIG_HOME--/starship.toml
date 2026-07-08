@@ -1,21 +1,15 @@
 # file location: ${XDG_CONFIG_HOME}/starship.toml
 #
-# Starship prompt configuration optimized for performance and simplicity.
+# Starship prompt configuration mirroring the previous powerlevel10k rainbow setup.
 #
-# Left prompt:  os_icon -> dir -> git (branch + status symbols) -> prompt char
-# Right prompt: status -> cmd_duration (≥3s) -> jobs -> username@hostname (SSH/root only) -> time
-#
-# Design philosophy:
-#   - Use built-in modules over custom segments (10-100x faster, automatic caching)
-#   - Let git_status provide dirty indicator (yellow symbols when changes exist)
-#   - Keep git_branch always green (consistent visual anchor)
-#   - Eliminate subprocess overhead (no custom when conditions or shell commands)
+# Left prompt:  os_icon → dir → git (branch + status symbols + repo size) → prompt char
+# Right prompt: status → cmd_duration (≥3s) → jobs → username@hostname (SSH/root only) → time
 #
 # Colors:
 #   os_icon:   bg=white,  fg=#000000 (explicit black to avoid terminal remapping)
-#   directory: bg=blue,   fg=#e4e4e4 (repo root anchor in bright-white bold)
-#   git_branch: bg=green, fg=black   (always green - clean visual anchor)
-#   git_status: bg=yellow, fg=black  (only shown when dirty - yellow symbols indicate changes)
+#   directory: bg=#008080 (teal), fg=#e4e4e4 (repo root anchor in bright-white bold)
+#   git clean: bg=green,  fg=black
+#   git dirty: bg=yellow, fg=black  (any modified/staged/untracked/stashed files)
 #   status:    ✔ bold green / ✘ bold red (no background, right prompt)
 #   cmd_dur:   bg=cyan,   fg=black  (only shown when command took ≥ 3 seconds)
 #   time:      bg=white,  fg=black
@@ -27,52 +21,36 @@
 #   \uE0B3  — left-pointing thin arrow (right prompt sub-separator)
 # Branch icon: \uF126
 
-# Disable blank line before prompt - iTerm2's auto-detection places mark on blank line instead of prompt
-add_newline = false
-# Command timeout for git operations in larger repos
-command_timeout = 1000
+# Add a blank line before each prompt
+add_newline = true
+# Raised from default 500ms to allow du (in 'git size' alias) to complete on large repos
+command_timeout = 5000
+# Per-module file-system scan budget; protects against slow directories
+scan_timeout = 30
+# Prompt prefix on continuation lines (e.g. unclosed quotes, multi-line if/for)
+continuation_prompt = "[❯❯ ](bold yellow)"
 
 # ── Left prompt ───────────────────────────────────────────────────────────────
-# Segment order: iterm2 mark A -> os -> directory -> git_branch -> git_size -> git_status -> git_state -> iterm2 mark B -> character
-# Arrow separators transition: white -> blue -> green -> (yellow if dirty) -> terminal default
+# Segment order: os → directory → git branch+status+size → prompt character
+# Arrow separators transition: white→teal→green(clean)/yellow(dirty)→terminal default
 #
-# Design:
-# - git_branch: Always green (visual anchor)
-# - git_size: Shows repo size on green background
-# - git_status: Yellow symbols when dirty/ahead/behind; a plain green arrow when the
-#   branch has an upstream and is not ahead/behind (see [git_status]'s 'up_to_date'
-#   field below -- this used to be a separate custom.git_sync_status segment that
-#   forked 'git status' + awk; it's now computed natively by git_status itself via
-#   gitoxide, with zero subprocess forks, at the cost of a minor semantic change:
-#   the arrow can now appear alongside dirty symbols too, see comment on [git_status])
-#
-# Visual behavior:
-# - Clean & synced: green branch -> size -> green arrow -> terminal bg
-# - Dirty & synced: green branch -> size -> yellow symbols (!?+*) -> yellow arrow -> green arrow
-# - Clean but ahead/behind: green branch -> size -> yellow symbols (⇡/⇣) -> yellow arrow
-# - Dirty & ahead/behind: green branch -> size -> yellow symbols -> yellow arrow -> yellow ahead/behind -> yellow arrow
-#
-# Performance: Built-in Rust modules only (zero forks, gitoxide-based). The repo-size and
-# iTerm2-mark segments are env_var modules fed by .zshrc (see [env_var.GIT_SIZE] and
-# [env_var.ITERM2_MARK_A] below) because every 'custom' module forks a shell per prompt
-# ('when' and 'command' each fork one), which dominated the prompt render time.
-#
-# iTerm2 shell integration: mark A (prompt start) + mark B (prompt end) output by starship (via env_var).
-# Newline output in precmd hook (runs before starship).
+# Git segments use custom commands instead of built-in modules because:
+# 1. Conditional backgrounds (green when clean, yellow when dirty) require custom logic
+# 2. Single git command for all status info is more efficient than separate module calls
+# 3. Repo size (via 'git size' alias) embedded directly in git_clean/git_dirty commands
 format = """
-${env_var.ITERM2_MARK_A}\
 [$os](bg:white fg:black)\
-[\uE0B0](fg:white bg:blue)\
-[$directory](bg:blue fg:#e4e4e4)\
-$git_branch\
-${env_var.GIT_SIZE}\
-$git_status\
+[\uE0B0](fg:white bg:#008080)\
+[$directory](bg:#008080 fg:#e4e4e4)\
+${custom.git_clean_sep}${custom.git_dirty_sep}\
+${custom.git_clean}${custom.git_dirty}\
+${custom.git_clean_end}${custom.git_dirty_end}\
 $git_state\
-${env_var.ITERM2_MARK_B}\
+$mise$direnv
 $character"""
 
 # ── Right prompt ──────────────────────────────────────────────────────────────
-# Segment order: status -> cmd_duration -> jobs -> context -> time
+# Segment order: status → cmd_duration → jobs → context → time
 # cmd_duration has its own embedded \uE0B2 separator (only appears when visible)
 # time is always shown, preceded by a \uE0B2 separator (white arrow into white bg)
 right_format = """
@@ -90,7 +68,7 @@ palette = "rainbow"
 [palettes.rainbow]
 color_os        = "white"
 color_os_fg     = "black"
-color_dir       = "blue"
+color_dir       = "#008080"
 color_dir_fg    = "color254"   # resolves to #e4e4e4
 color_git       = "green"
 color_git_fg    = "black"
@@ -114,7 +92,7 @@ Macos = "\uF179"   # nerd font apple icon
 # ── Directory ─────────────────────────────────────────────────────────────────
 # Full path from ~ with no truncation (truncation_length=100 is effectively unlimited).
 # Repo root segment is highlighted in bright-white bold (anchor styling).
-# All path components share the blue background via repo_root_format.
+# All path components share the teal background via repo_root_format.
 [directory]
 format = "[ $path ]($style)[$read_only]($read_only_style)"
 style = "bg:color_dir fg:color_dir_fg bold"
@@ -131,109 +109,17 @@ home_symbol = "~"
 # The regular format handles all cases correctly without duplication.
 
 # ── Git branch & status ───────────────────────────────────────────────────────
-# Design philosophy (following GitHub issue #7556 comment):
-# - git_branch: Always green background (consistent visual anchor)
-# - git_status: Yellow background with symbols when dirty/ahead/behind; a plain green
-#   arrow (no background) when there's an upstream with no ahead/behind -- see the
-#   detailed trade-off comment on [git_status] below.
-# - Built-in Rust modules: 10-100x faster than custom shell segments, zero subprocess
-#   forks (gitoxide-based, not the 'git' executable -- see 'use_git_executable' in
-#   starship's git_status docs, which defaults to false)
-# - No custom when conditions: Zero subprocess overhead
-#
-# Visual behavior:
-# - Clean repo, synced: green branch -> green arrow -> terminal bg
-# - Dirty repo, synced: green branch -> green->yellow arrow -> yellow status symbols -> yellow arrow -> green arrow
-# - Clean repo, ahead/behind: green branch -> green->yellow arrow -> yellow ahead/behind -> yellow arrow
-#
-# See: https://github.com/starship/starship/issues/7556#issuecomment-5397167112
-
+# Built-in modules: Available but not used. The custom segments below provide:
+# - Conditional green (clean) / yellow (dirty) backgrounds
+# - Single git command for all status info (more efficient than separate modules)
+# - Repo size display (not available in built-in modules)
+# - Matching P10k visual style
+# Logged feature request: https://github.com/starship/starship/issues/7556
 [git_branch]
-disabled = false
-# Always show branch with green background (no conditional styling)
-# Trailing space on green background for smooth transition to git_size
-format = "[\uE0B0](fg:blue bg:green)[ \uf126 $branch ](bg:green fg:black)"
-style = "bg:green fg:black"
-symbol = ""
-truncation_length = 32
-truncation_symbol = "…"
+disabled = true
 
 [git_status]
-disabled = false
-# $all_status (dirty file changes) and $ahead_behind (ahead/behind/diverged/synced vs
-# upstream) are split into two independently-conditional pieces rather than one shared
-# bracket -- this lets $ahead_behind's 'up_to_date' branch render unconditionally
-# (a plain green arrow, no yellow) while $all_status stays conditional on actual dirty
-# state. Trade-off vs the old design (a separate custom.git_sync_status segment that
-# forked 'git status --porcelain=v2' + awk): this whole indicator is now 100% native
-# (gitoxide, zero forks) instead of ~3 forks per prompt render, but the green arrow is
-# no longer mutually exclusive with dirty symbols -- it now shows whenever there's an
-# upstream with no ahead/behind, REGARDLESS of whether the tree is dirty (e.g. a
-# modified-but-unpushed-nothing state renders '!1' followed by a green arrow). In the
-# rare case of BOTH dirty AND ahead/behind at once, this renders as two separate yellow
-# pills (e.g. '!1' then '⇡1') instead of one merged pill ('!1⇡1') -- each half keeps its
-# own entry/exit powerline arrows since the format string can't know at render time
-# whether the other half will also be visible.
-format = "([\uE0B0](fg:green bg:yellow)[ $all_status ](bg:yellow fg:black)[\uE0B0](fg:yellow))$ahead_behind"
-style = "bg:yellow fg:black"
-# Status symbols with counts
-modified = "!${count}"
-staged = "+${count}"
-untracked = "?${count}"
-stashed = "*${count}"
-deleted = "✘${count}"
-renamed = "»${count}"
-conflicted = "=${count}"
-# Ahead/behind symbols -- each carries its own full yellow pill (entry arrow, content,
-# exit arrow) since it's no longer sharing a bracket with $all_status (see comment above).
-ahead = "[\uE0B0](fg:green bg:yellow)[ ⇡${count} ](bg:yellow fg:black)[\uE0B0](fg:yellow)"
-behind = "[\uE0B0](fg:green bg:yellow)[ ⇣${count} ](bg:yellow fg:black)[\uE0B0](fg:yellow)"
-diverged = "[\uE0B0](fg:green bg:yellow)[ ⇣${ahead_count}⇡${behind_count} ](bg:yellow fg:black)[\uE0B0](fg:yellow)"
-# Plain green arrow (no background) when there's an upstream and no ahead/behind --
-# matches the old custom.git_sync_status segment's exact look ('[\uE0B0](fg:green)').
-# Empty (default) when there's no upstream configured at all, matching prior behavior.
-up_to_date = "[\uE0B0](fg:green)"
-
-# ── Git repository size (env_var, populated by .zshrc) ───────────────────────
-# Shows pack size in human-readable format (e.g., "1.37 MiB").
-# '_STARSHIP_GIT_SIZE' is set by the _prompt_git_size precmd hook in .zshrc, which only
-# re-runs 'git count-objects -vH' when the repo's objects/pack directory changed (that is
-# the only thing 'size-pack' measures) and unsets it outside a repo, so this segment is
-# hidden there. This replaces a custom module that forked 'sh', 'git' and 'awk' on every
-# prompt (~30-55ms on the critical path). The 'git size' alias remains available for
-# interactive/manual use and for scripts (path_utils.rb).
-#
-# Visual integration:
-# - Placed after git_branch on green background
-# - No trailing arrow (git_status provides the transition: either its own yellow
-#   entry arrow when dirty, or up_to_date's plain green arrow when clean and synced)
-[env_var.GIT_SIZE]
-variable = "_STARSHIP_GIT_SIZE"
-format = "[$env_value ](bg:green fg:black)"
-
-# ── iTerm2 shell integration marks A and B (env_var, populated by .zshrc) ────
-# Mark A (prompt start) and mark B (prompt end) for iTerm2 shell integration.
-# Newline output in precmd hook (runs before starship renders).
-# Marks C/D (command start/end) output in preexec/precmd hooks in .zshrc.
-#
-# The complete set of 4 marks enables full iTerm2 features:
-#   - Command output selection (⌘⇧A)
-#   - Mark navigation/cycling (⌘↑ / ⌘↓ with wraparound)
-#   - Shell integration features without iTerm2's auto-detection
-#
-# The escape sequences are exported once by .zshrc's iTerm2 block as
-# '_STARSHIP_ITERM2_MARK_A' / '_STARSHIP_ITERM2_MARK_B', and only after .zshrc has
-# finished loading and only inside iTerm2, so an unset variable (anywhere else, or during
-# shell initialization) renders nothing. Using env_var instead of custom modules avoids
-# forking two shells per module per prompt.
-[env_var.ITERM2_MARK_A]
-variable = "_STARSHIP_ITERM2_MARK_A"
-format = "$env_value"
-
-[env_var.ITERM2_MARK_B]
-variable = "_STARSHIP_ITERM2_MARK_B"
-format = "$env_value"
-description = "iTerm2 prompt end mark (after visible prompt content)"
+disabled = true
 
 # ── Exit status ───────────────────────────────────────────────────────────────
 # ✔ in bold green on zero exit; ✘ in bold red on non-zero exit.
@@ -297,15 +183,141 @@ time_format = "%I:%M:%S %p"
 use_12hr = true
 
 # ── Prompt character ──────────────────────────────────────────────────────────
-# ❯ in green on success, red on error. ❮ in vi command mode.
+# Vi-mode aware (mirrors the old p10k vi-mode prompt indicators):
+#   ❯ green  — insert mode, last command succeeded
+#   ❯ red    — insert mode, last command failed
+#   ❮ green  — normal (vicmd) mode
+#   V yellow — visual mode
+#   R red    — replace mode
 [character]
 success_symbol = "[❯](bold green)"
 error_symbol = "[❯](bold red)"
 vimcmd_symbol = "[❮](bold green)"
+vimcmd_visual_symbol = "[V](bold yellow)"
+vimcmd_replace_symbol = "[R](bold red)"
+vimcmd_replace_one_symbol = "[R](bold red)"
+
+# ── Custom: git segments with conditional green/yellow background ─────────────
+# The git section uses green bg when the repo is clean and yellow bg when dirty
+# (any modified, staged, untracked, or stashed files).
+#
+# Dirty detection: `git status --porcelain` produces output when the working tree
+# is dirty; the `when` condition below succeeds (exit 0) only in the target state.
+#
+# Each state has three parts:
+#   *_sep  — the teal→color powerline left-arrow separator
+#   *      — branch icon + branch name + status symbols + repo size
+#   *_end  — the trailing color→default powerline left-arrow separator
+#
+# Repo size is embedded directly in the git_clean/git_dirty commands (via 'git size'
+# alias) to eliminate redundant when conditions and maintain consistent background colors.
+
+# Dirty state: shown when `git status --porcelain` produces any output
+[custom.git_dirty_sep]
+command = "true"
+require_repo = true
+when = "[ \"$(git rev-parse --show-toplevel 2>/dev/null)\" != \"$HOME\" ] && git is-dirty"
+shell = ["sh", "--noprofile", "--norc"]
+format = "[\uE0B0]($style)"
+style = "fg:#008080 bg:yellow"
+ignore_timeout = true
+
+[custom.git_dirty]
+command = """
+# Hide all git segments when the repo root is $HOME (home-dir repo)
+[ "$(git rev-parse --show-toplevel 2>/dev/null)" = "$HOME" ] && exit 1
+porcelain=$(git st-nolock)
+# Exit early if clean (hide this dirty-state segment)
+[ -z "$porcelain" ] && exit 1
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+branch=$(printf '%.32s' "$branch")
+[ ${#branch} -eq 32 ] && branch="${branch}…"
+staged=$(printf '%s\n' "$porcelain" | /usr/bin/grep -c "^[MADRC]" || true)
+modified=$(printf '%s\n' "$porcelain" | /usr/bin/grep -c "^.M\\| M" || true)
+untracked=$(printf '%s\n' "$porcelain" | /usr/bin/grep -c "^??" || true)
+stashed=$(git stash list 2>/dev/null | /usr/bin/grep -c . || true)
+ahead=$(git rev-list --count @{u}..HEAD 2>/dev/null || echo 0)
+behind=$(git rev-list --count HEAD..@{u} 2>/dev/null || echo 0)
+status_str=""
+[ "$staged" -gt 0 ] && status_str="${status_str}+${staged}"
+[ "$modified" -gt 0 ] && status_str="${status_str}!${modified}"
+[ "$untracked" -gt 0 ] && status_str="${status_str}?${untracked}"
+[ "$stashed" -gt 0 ] && status_str="${status_str}*${stashed}"
+[ "$ahead" -gt 0 ] && [ "$behind" -gt 0 ] && status_str="${status_str}⇣${behind}⇡${ahead}"
+[ "$ahead" -gt 0 ] && [ "$behind" -eq 0 ] && status_str="${status_str}⇡${ahead}"
+[ "$behind" -gt 0 ] && [ "$ahead" -eq 0 ] && status_str="${status_str}⇣${behind}"
+# Append repo size (from git size alias)
+size=$(GIT_SIZE_QUIET=1 git size)
+[ -n "$status_str" ] && printf ' \uf126 %s %s %s \n' "$branch" "$status_str" "$size" || printf ' \uf126 %s %s \n' "$branch" "$size"
+"""
+require_repo = true
+when = "true"
+shell = ["sh", "--noprofile", "--norc"]
+format = "[$output]($style)"
+style = "bg:yellow fg:black"
+ignore_timeout = true
+
+# Clean state: shown when inside a git repo but working tree is clean
+[custom.git_clean_sep]
+command = "true"
+require_repo = true
+when = "[ \"$(git rev-parse --show-toplevel 2>/dev/null)\" != \"$HOME\" ] && ! git is-dirty"
+shell = ["sh", "--noprofile", "--norc"]
+format = "[\uE0B0]($style)"
+style = "fg:#008080 bg:green"
+ignore_timeout = true
+
+[custom.git_clean]
+command = """
+# Hide all git segments when the repo root is $HOME (home-dir repo)
+[ "$(git rev-parse --show-toplevel 2>/dev/null)" = "$HOME" ] && exit 1
+porcelain=$(git st-nolock)
+# Exit early if dirty (hide this clean-state segment)
+[ -n "$porcelain" ] && exit 1
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+branch=$(printf '%.32s' "$branch")
+[ ${#branch} -eq 32 ] && branch="${branch}…"
+ahead=$(git rev-list --count @{u}..HEAD 2>/dev/null || echo 0)
+behind=$(git rev-list --count HEAD..@{u} 2>/dev/null || echo 0)
+status_str=""
+[ "$ahead" -gt 0 ] && [ "$behind" -gt 0 ] && status_str=" ⇣${behind}⇡${ahead}"
+[ "$ahead" -gt 0 ] && [ "$behind" -eq 0 ] && status_str=" ⇡${ahead}"
+[ "$behind" -gt 0 ] && [ "$ahead" -eq 0 ] && status_str=" ⇣${behind}"
+# Append repo size (from git size alias)
+size=$(GIT_SIZE_QUIET=1 git size)
+printf ' \uf126 %s%s %s \n' "$branch" "$status_str" "$size"
+"""
+require_repo = true
+when = "true"
+shell = ["sh", "--noprofile", "--norc"]
+format = "[$output]($style)"
+style = "bg:green fg:black"
+ignore_timeout = true
+
+# Trailing powerline separators (color→terminal default)
+[custom.git_clean_end]
+command = "true"
+require_repo = true
+when = "[ \"$(git rev-parse --show-toplevel 2>/dev/null)\" != \"$HOME\" ] && ! git is-dirty"
+shell = ["sh", "--noprofile", "--norc"]
+format = "[\uE0B0]($style)"
+style = "fg:green"
+ignore_timeout = true
+
+[custom.git_dirty_end]
+command = "true"
+require_repo = true
+when = "[ \"$(git rev-parse --show-toplevel 2>/dev/null)\" != \"$HOME\" ] && git is-dirty"
+shell = ["sh", "--noprofile", "--norc"]
+format = "[\uE0B0]($style)"
+style = "fg:yellow"
+ignore_timeout = true
 
 # ── Git operation state (built-in module) ────────────────────────────────────
 # Shown in bold red when a multi-step git operation is in progress:
 # rebase, merge, cherry-pick, revert, or bisect.
+# Uses Starship's built-in git_state module (replaced custom segment that manually
+# checked git refs - built-in uses same logic internally but with better caching).
 [git_state]
 format = "[$state( $progress_current/$progress_total)]($style)"
 style = "bold red"
