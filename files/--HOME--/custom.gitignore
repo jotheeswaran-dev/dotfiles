@@ -40,6 +40,16 @@ Thumbs.db
 # ══════════════════════════════════════════════════════════════════════════════
 
 /.CFUserTextEncoding
+
+# User-specific tool ignores
+/.config/AWS VPN Client/
+/.config/AWSVPNClient/
+/.config/gcloud/
+/.pgadmin/pgadmin*log*
+/.pgadmin/sessions/
+/.python_history
+/.th-client/*.json
+/.vim/.*whist
 /.ctsystem
 /.cups/
 /.dmrc
@@ -188,6 +198,7 @@ Thumbs.db
 /.libreoffice/
 /.lima/
 /.minikube/
+/.rdlima/
 /.mono/registry/
 /.nchsoftware/
 /.nix-profile/
@@ -197,6 +208,7 @@ Thumbs.db
 /.rd/
 /.RSA/
 /.scalarDiagnostics/
+/.sonar/
 /.sonarlint/
 /.sts4/
 /.sts4-jandex/
@@ -253,6 +265,9 @@ node_modules/
 /.continue/config.py
 /.continue/server
 /.continue/sessions
+/.cursor/ai-tracking/
+/.cursor/extensions/
+/.dbclient/
 /.vim/autoload/plug.vim
 
 
@@ -281,6 +296,10 @@ node_modules/
 /.copilot/session-store.db-wal
 
 # Other AI tools
+/.codex/logs*.sqlite
+/.codex/sessions/
+/.config/cursor/chats/
+/.config/cursor/statsig-cache.json
 /.gemini/
 /.qwen/
 /.safety/
@@ -362,6 +381,8 @@ node_modules/
 /Google\ Drive/
 /Google\ Drive\ File\ Stream/
 /Library/
+# Stray /Users/ tree at $HOME (created by tools that resolve absolute paths under home)
+/Users/
 /mbox
 /mechvibes_custom/
 /Movies/
@@ -461,6 +482,11 @@ node_modules/
 /.config/zsh/*.zwc
 /.config/zsh/plugins.zsh
 /.config/zsh/.zsh_history
+/.config/karabiner*
+/.config/nvim*
+/.config/tmux*
+/.config/yazi*
+/.curlrc
 /.default-gems
 /.editorconfig
 /.erdconfig

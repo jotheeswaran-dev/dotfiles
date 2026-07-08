@@ -40,7 +40,10 @@ module InstallDotfiles
   CUSTOM_GIT_PREFIX = 'custom.git' # Prefix in source filenames (custom.gitignore, custom.gitattributes) that gets replaced with '.git'
   DOT_GIT_REPLACEMENT_TARGET = '.git' # Target string for replacement (e.g., custom.gitignore -> .gitignore)
 
-  IGNORED_FILENAMES = ['.DS_Store'].freeze # Filenames to ignore during processing
+  # '.npmrc' is intentionally skipped: npm writes auth tokens into it (e.g. on 'npm login'),
+  # so it must stay a machine-local real file -- never symlinked into (or moved back into)
+  # this tracked repo, which would leak the token. Keep it out of 'files/' entirely.
+  IGNORED_FILENAMES = ['.DS_Store', '.npmrc'].freeze # Filenames to ignore during processing
   IGNORED_SUFFIXES = ['.zwc'].freeze # File suffixes to ignore (e.g., compiled bytecode)
 
   # Statistics tracking -- use a Struct so the intent (a mutable bag of counters) is explicit

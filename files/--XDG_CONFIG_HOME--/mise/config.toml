@@ -38,3 +38,13 @@ compile = true
 # Python uses pre-built binaries that already include PGO+LTO optimizations.
 # PYTHON_CONFIGURE_OPTS from .aliases is only used if mise falls back to python-build.
 github_attestations = false
+
+[tools]
+claude = "latest"
+dotnet = "10"
+"dotnet:dotnet-ef" = "latest"
+node = "26.2.0"
+postgres = "17"
+python = "3.14"
+tflint = "latest"
+yarn = "latest"
